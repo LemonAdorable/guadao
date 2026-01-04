@@ -18,7 +18,8 @@ contract MerkleAirdrop is Ownable {
     bytes32 public merkleRoot;
 
     /// @dev 记录已领取的地址
-    mapping(address => bool) public claimed;
+    uint256 public epoch;
+    mapping(address => uint256) public claimedEpoch;
 
     /// @dev Root 更新事件
     event MerkleRootUpdated(bytes32 indexed oldRoot, bytes32 indexed newRoot);
@@ -45,6 +46,7 @@ contract MerkleAirdrop is Ownable {
      */
     function setMerkleRoot(bytes32 _merkleRoot) external onlyOwner {
         bytes32 oldRoot = merkleRoot;
+        epoch += 1;
         merkleRoot = _merkleRoot;
         emit MerkleRootUpdated(oldRoot, _merkleRoot);
     }
@@ -60,7 +62,7 @@ contract MerkleAirdrop is Ownable {
         require(to != address(0), "MerkleAirdrop: invalid address");
         require(amount > 0, "MerkleAirdrop: invalid amount");
         require(merkleRoot != bytes32(0), "MerkleAirdrop: root not set");
-        require(!claimed[to], "MerkleAirdrop: already claimed");
+        require(claimedEpoch[to] < epoch, "MerkleAirdrop: already claimed");
 
         // 构建 leaf：keccak256(abi.encodePacked(address, amount))
         bytes32 leaf = keccak256(abi.encodePacked(to, amount));
@@ -69,7 +71,7 @@ contract MerkleAirdrop is Ownable {
         require(MerkleProof.verify(proof, merkleRoot, leaf), "MerkleAirdrop: invalid proof");
 
         // 标记为已领取
-        claimed[to] = true;
+        claimedEpoch[to] = epoch;
 
         // Mint 代币到用户地址
         guaToken.mint(to, amount);
@@ -77,5 +79,8 @@ contract MerkleAirdrop is Ownable {
         // 发出事件
         emit Claimed(to, amount);
     }
-}
 
+    function claimed(address account) external view returns (bool) {
+        return epoch > 0 && claimedEpoch[account] == epoch;
+    }
+}

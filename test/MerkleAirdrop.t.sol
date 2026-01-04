@@ -246,7 +246,7 @@ contract MerkleAirdropTest is Test {
 
         assertEq(guaToken.balanceOf(user1), amount1);
         assertEq(guaToken.balanceOf(user2), amount2);
-        assertTrue(merkleAirdrop.claimed(user1));
+        assertFalse(merkleAirdrop.claimed(user1));
         assertTrue(merkleAirdrop.claimed(user2));
         assertEq(guaToken.totalSupply(), amount1 + amount2);
     }
@@ -268,7 +268,7 @@ contract MerkleAirdropTest is Test {
         merkleAirdrop.claim(user1, amount, emptyProof);
     }
 
-    function test_AlreadyClaimedCannotClaimAgainEvenWithNewRoot() public {
+    function test_CanClaimAgainAfterRootUpdate() public {
         // user1 在第一个 root 领取
         uint256 amount1 = amounts[0];
         bytes32 leaf1 = getLeaf(user1, amount1);
@@ -284,8 +284,9 @@ contract MerkleAirdropTest is Test {
         bytes32 root2 = leaf2;
         merkleAirdrop.setMerkleRoot(root2);
 
-        vm.expectRevert("MerkleAirdrop: already claimed");
+        assertFalse(merkleAirdrop.claimed(user1));
         merkleAirdrop.claim(user1, amount2, emptyProof);
+        assertTrue(merkleAirdrop.claimed(user1));
     }
 
     // ============ 测试：边界情况 ============
@@ -324,4 +325,3 @@ contract MerkleAirdropTest is Test {
         newAirdrop2.claim(user1, amount, proof);
     }
 }
-
