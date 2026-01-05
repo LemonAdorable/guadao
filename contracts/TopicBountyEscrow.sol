@@ -6,7 +6,15 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract TopicBountyEscrow is Ownable {
     enum ProposalStatus {
-        Created
+        Created,
+        Voting,
+        VotingFinalized,
+        Accepted,
+        Submitted,
+        Disputed,
+        Completed,
+        Denied,
+        Expired
     }
 
     struct Proposal {
@@ -26,6 +34,10 @@ contract TopicBountyEscrow is Ownable {
         bytes32 pinnedCodeHash;
         uint256 challengeWindowEnd;
         bool deliverySubmitted;
+        address challenger;
+        bytes32 reasonHash;
+        bytes32 evidenceHash;
+        bool disputeResolved;
     }
 
     struct Topic {
@@ -33,6 +45,7 @@ contract TopicBountyEscrow is Ownable {
     }
 
     IERC20 public immutable guaToken;
+    address public immutable treasury;
 
     uint256 public proposalCount;
     mapping(uint256 => Proposal) private proposals;
@@ -64,12 +77,22 @@ contract TopicBountyEscrow is Ownable {
         bytes32 pinnedCodeHash,
         uint256 challengeWindowEnd
     );
+    event DeliveryChallenged(
+        uint256 indexed proposalId,
+        address indexed challenger,
+        bytes32 reasonHash,
+        bytes32 evidenceHash
+    );
+    event DisputeResolved(uint256 indexed proposalId, address indexed resolver, bool approved);
+    event Expired(uint256 indexed proposalId, uint256 amount);
 
-    constructor(address _guaToken, address _owner) Ownable(_owner) {
+    constructor(address _guaToken, address _owner, address _treasury) Ownable(_owner) {
         require(_guaToken != address(0), "TopicBountyEscrow: invalid token");
         require(_owner != address(0), "TopicBountyEscrow: invalid owner");
+        require(_treasury != address(0), "TopicBountyEscrow: invalid treasury");
 
         guaToken = IERC20(_guaToken);
+        treasury = _treasury;
     }
 
     function createProposal(
@@ -86,7 +109,7 @@ contract TopicBountyEscrow is Ownable {
             startTime: startTime,
             endTime: endTime,
             topicCount: uint8(count),
-            status: ProposalStatus.Created,
+            status: ProposalStatus.Voting,
             winnerTopicId: 0,
             totalPool: 0,
             finalized: false,
@@ -98,7 +121,11 @@ contract TopicBountyEscrow is Ownable {
             videoIdHash: bytes32(0),
             pinnedCodeHash: bytes32(0),
             challengeWindowEnd: 0,
-            deliverySubmitted: false
+            deliverySubmitted: false,
+            challenger: address(0),
+            reasonHash: bytes32(0),
+            evidenceHash: bytes32(0),
+            disputeResolved: false
         });
 
         uint256[] memory topicIds = new uint256[](count);
@@ -115,6 +142,7 @@ contract TopicBountyEscrow is Ownable {
     function finalizeVoting(uint256 proposalId) external {
         Proposal storage proposal = proposals[proposalId];
         require(proposal.topicCount > 0, "TopicBountyEscrow: invalid proposal");
+        require(proposal.status == ProposalStatus.Voting, "TopicBountyEscrow: not voting");
         require(block.timestamp > proposal.endTime, "TopicBountyEscrow: voting not ended");
         require(!proposal.finalized, "TopicBountyEscrow: already finalized");
 
@@ -135,6 +163,7 @@ contract TopicBountyEscrow is Ownable {
         proposal.winnerTopicId = winningTopicId;
         proposal.totalPool = pool;
         proposal.finalized = true;
+        proposal.status = ProposalStatus.VotingFinalized;
 
         emit VotingFinalized(proposalId, winningTopicId, pool);
     }
@@ -142,6 +171,7 @@ contract TopicBountyEscrow is Ownable {
     function confirmWinnerAndPay10(uint256 proposalId) external onlyOwner {
         Proposal storage proposal = proposals[proposalId];
         require(proposal.topicCount > 0, "TopicBountyEscrow: invalid proposal");
+        require(proposal.status == ProposalStatus.VotingFinalized, "TopicBountyEscrow: voting not finalized");
         require(proposal.finalized, "TopicBountyEscrow: voting not finalized");
         require(!proposal.confirmed, "TopicBountyEscrow: already confirmed");
 
@@ -155,6 +185,7 @@ contract TopicBountyEscrow is Ownable {
         proposal.remaining90 = remaining90;
         proposal.submitDeadline = block.timestamp + 14 days;
         proposal.confirmed = true;
+        proposal.status = ProposalStatus.Accepted;
 
         guaToken.transfer(winningTopic.owner, payout10);
 
@@ -175,6 +206,7 @@ contract TopicBountyEscrow is Ownable {
     ) external {
         Proposal storage proposal = proposals[proposalId];
         require(proposal.topicCount > 0, "TopicBountyEscrow: invalid proposal");
+        require(proposal.status == ProposalStatus.Accepted, "TopicBountyEscrow: not accepted");
         require(proposal.confirmed, "TopicBountyEscrow: winner not confirmed");
         require(!proposal.deliverySubmitted, "TopicBountyEscrow: already submitted");
         require(block.timestamp <= proposal.submitDeadline, "TopicBountyEscrow: submission expired");
@@ -187,6 +219,7 @@ contract TopicBountyEscrow is Ownable {
         proposal.pinnedCodeHash = pinnedCodeHash;
         proposal.challengeWindowEnd = block.timestamp + 72 hours;
         proposal.deliverySubmitted = true;
+        proposal.status = ProposalStatus.Submitted;
 
         emit DeliverySubmitted(
             proposalId,
@@ -198,10 +231,104 @@ contract TopicBountyEscrow is Ownable {
         );
     }
 
+    function challengeDelivery(
+        uint256 proposalId,
+        bytes32 reasonHash,
+        bytes32 evidenceHash
+    ) external {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposal.topicCount > 0, "TopicBountyEscrow: invalid proposal");
+        require(proposal.status != ProposalStatus.Disputed, "TopicBountyEscrow: already disputed");
+        require(proposal.status == ProposalStatus.Submitted, "TopicBountyEscrow: not submitted");
+        require(
+            block.timestamp < proposal.challengeWindowEnd,
+            "TopicBountyEscrow: challenge window closed"
+        );
+
+        uint256 bond = 10_000 ether;
+        guaToken.transferFrom(msg.sender, address(this), bond);
+
+        proposal.challenger = msg.sender;
+        proposal.reasonHash = reasonHash;
+        proposal.evidenceHash = evidenceHash;
+        proposal.status = ProposalStatus.Disputed;
+
+        emit DeliveryChallenged(proposalId, msg.sender, reasonHash, evidenceHash);
+    }
+
+    function finalizeDelivery(uint256 proposalId) external {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposal.topicCount > 0, "TopicBountyEscrow: invalid proposal");
+        require(proposal.status == ProposalStatus.Submitted, "TopicBountyEscrow: not submitted");
+        require(
+            block.timestamp >= proposal.challengeWindowEnd,
+            "TopicBountyEscrow: challenge window open"
+        );
+
+        Topic memory winningTopic = topics[proposalId][proposal.winnerTopicId];
+        require(winningTopic.owner != address(0), "TopicBountyEscrow: invalid winner");
+
+        uint256 remaining90 = proposal.remaining90;
+        proposal.status = ProposalStatus.Completed;
+
+        guaToken.transfer(winningTopic.owner, remaining90);
+    }
+
+    function expireIfNoSubmission(uint256 proposalId) external {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposal.topicCount > 0, "TopicBountyEscrow: invalid proposal");
+        require(proposal.status == ProposalStatus.Accepted, "TopicBountyEscrow: not accepted");
+        require(!proposal.deliverySubmitted, "TopicBountyEscrow: delivery already submitted");
+        require(block.timestamp > proposal.submitDeadline, "TopicBountyEscrow: submit deadline not reached");
+
+        uint256 remaining90 = proposal.remaining90;
+        proposal.status = ProposalStatus.Expired;
+
+        guaToken.transfer(treasury, remaining90);
+
+        emit Expired(proposalId, remaining90);
+    }
+
+    function resolveDispute(uint256 proposalId, bool approve) external onlyOwner {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposal.topicCount > 0, "TopicBountyEscrow: invalid proposal");
+        require(proposal.status == ProposalStatus.Disputed, "TopicBountyEscrow: not disputed");
+        require(!proposal.disputeResolved, "TopicBountyEscrow: already resolved");
+        require(proposal.deliverySubmitted, "TopicBountyEscrow: delivery not submitted");
+        require(proposal.confirmed, "TopicBountyEscrow: winner not confirmed");
+
+        Topic memory winningTopic = topics[proposalId][proposal.winnerTopicId];
+        require(winningTopic.owner != address(0), "TopicBountyEscrow: invalid winner");
+        require(proposal.challenger != address(0), "TopicBountyEscrow: invalid challenger");
+
+        uint256 bond = 10_000 ether;
+        uint256 remaining90 = proposal.remaining90;
+        if (approve) {
+            guaToken.transfer(winningTopic.owner, remaining90);
+            guaToken.transfer(treasury, bond);
+            proposal.status = ProposalStatus.Completed;
+        } else {
+            uint256 reward = 5_000 ether;
+            require(
+                guaToken.allowance(treasury, address(this)) >= reward,
+                "TopicBountyEscrow: treasury allowance insufficient"
+            );
+            guaToken.transfer(treasury, remaining90);
+            guaToken.transfer(proposal.challenger, bond);
+            guaToken.transferFrom(treasury, proposal.challenger, reward);
+            proposal.status = ProposalStatus.Denied;
+        }
+
+        proposal.disputeResolved = true;
+
+        emit DisputeResolved(proposalId, msg.sender, approve);
+    }
+
     function stakeVote(uint256 proposalId, uint256 topicId, uint256 amount) external {
         require(amount > 0, "TopicBountyEscrow: invalid amount");
         Proposal memory proposal = proposals[proposalId];
         require(proposal.topicCount > 0, "TopicBountyEscrow: invalid proposal");
+        require(proposal.status == ProposalStatus.Voting, "TopicBountyEscrow: not voting");
         require(topicId < proposal.topicCount, "TopicBountyEscrow: invalid topic");
         require(
             block.timestamp >= proposal.startTime && block.timestamp <= proposal.endTime,

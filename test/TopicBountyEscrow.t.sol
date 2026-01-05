@@ -9,18 +9,50 @@ contract TopicBountyEscrowTest is Test {
     TopicBountyEscrow public escrow;
     GUAToken public token;
     address public owner;
+    address public treasury;
     address public user1;
     address public user2;
     address public user3;
 
     function setUp() public {
         owner = address(this);
+        treasury = address(0xBEEF);
         user1 = address(0x1);
         user2 = address(0x2);
         user3 = address(0x3);
 
         token = new GUAToken();
-        escrow = new TopicBountyEscrow(address(token), owner);
+        escrow = new TopicBountyEscrow(address(token), owner, treasury);
+    }
+
+    function _createDisputedProposal() internal returns (uint256 proposalId) {
+        address[] memory owners = new address[](3);
+        owners[0] = user1;
+        owners[1] = user2;
+        owners[2] = user3;
+
+        uint64 startTime = uint64(block.timestamp);
+        uint64 endTime = uint64(block.timestamp + 1 days);
+        proposalId = escrow.createProposal(owners, startTime, endTime);
+
+        token.mint(user1, 10 ether);
+        vm.startPrank(user1);
+        token.approve(address(escrow), 10 ether);
+        escrow.stakeVote(proposalId, 0, 10 ether);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 2 days);
+        escrow.finalizeVoting(proposalId);
+        escrow.confirmWinnerAndPay10(proposalId);
+
+        vm.prank(user1);
+        escrow.submitDelivery(proposalId, keccak256("url"), keccak256("vid"), keccak256("pin"));
+
+        token.mint(user2, 10_000 ether);
+        vm.startPrank(user2);
+        token.approve(address(escrow), 10_000 ether);
+        escrow.challengeDelivery(proposalId, keccak256("reason"), keccak256("evidence"));
+        vm.stopPrank();
     }
 
     function test_CreateProposalStoresData() public {
@@ -40,7 +72,7 @@ contract TopicBountyEscrowTest is Test {
         assertEq(proposal.startTime, startTime);
         assertEq(proposal.endTime, endTime);
         assertEq(proposal.topicCount, 3);
-        assertEq(uint8(proposal.status), uint8(TopicBountyEscrow.ProposalStatus.Created));
+        assertEq(uint8(proposal.status), uint8(TopicBountyEscrow.ProposalStatus.Voting));
         assertEq(proposal.winnerTopicId, 0);
         assertEq(proposal.totalPool, 0);
         assertFalse(proposal.finalized);
@@ -53,6 +85,10 @@ contract TopicBountyEscrowTest is Test {
         assertEq(proposal.pinnedCodeHash, bytes32(0));
         assertEq(proposal.challengeWindowEnd, 0);
         assertFalse(proposal.deliverySubmitted);
+        assertEq(proposal.challenger, address(0));
+        assertEq(proposal.reasonHash, bytes32(0));
+        assertEq(proposal.evidenceHash, bytes32(0));
+        assertFalse(proposal.disputeResolved);
 
         TopicBountyEscrow.Topic memory topic0 = escrow.getTopic(proposalId, 0);
         TopicBountyEscrow.Topic memory topic1 = escrow.getTopic(proposalId, 1);
@@ -222,7 +258,7 @@ contract TopicBountyEscrowTest is Test {
         vm.warp(block.timestamp + 2 days);
         escrow.finalizeVoting(proposalId);
 
-        vm.expectRevert("TopicBountyEscrow: already finalized");
+        vm.expectRevert("TopicBountyEscrow: not voting");
         escrow.finalizeVoting(proposalId);
     }
 
@@ -290,7 +326,7 @@ contract TopicBountyEscrowTest is Test {
         escrow.finalizeVoting(proposalId);
         escrow.confirmWinnerAndPay10(proposalId);
 
-        vm.expectRevert("TopicBountyEscrow: already confirmed");
+        vm.expectRevert("TopicBountyEscrow: voting not finalized");
         escrow.confirmWinnerAndPay10(proposalId);
     }
 
@@ -402,7 +438,276 @@ contract TopicBountyEscrowTest is Test {
         escrow.submitDelivery(proposalId, keccak256("url"), keccak256("vid"), keccak256("pin"));
 
         vm.prank(user3);
-        vm.expectRevert("TopicBountyEscrow: already submitted");
+        vm.expectRevert("TopicBountyEscrow: not accepted");
         escrow.submitDelivery(proposalId, keccak256("url2"), keccak256("vid2"), keccak256("pin2"));
+    }
+
+    function test_FinalizeDeliveryPaysRemaining90() public {
+        address[] memory owners = new address[](3);
+        owners[0] = user1;
+        owners[1] = user2;
+        owners[2] = user3;
+
+        uint64 startTime = uint64(block.timestamp);
+        uint64 endTime = uint64(block.timestamp + 1 days);
+        uint256 proposalId = escrow.createProposal(owners, startTime, endTime);
+
+        token.mint(user1, 50 ether);
+        vm.startPrank(user1);
+        token.approve(address(escrow), 50 ether);
+        escrow.stakeVote(proposalId, 0, 50 ether);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 2 days);
+        escrow.finalizeVoting(proposalId);
+        escrow.confirmWinnerAndPay10(proposalId);
+
+        vm.prank(user1);
+        escrow.submitDelivery(proposalId, keccak256("url"), keccak256("vid"), keccak256("pin"));
+
+        TopicBountyEscrow.Proposal memory proposalBefore = escrow.getProposal(proposalId);
+        uint256 balanceBefore = token.balanceOf(user1);
+
+        vm.warp(block.timestamp + 73 hours);
+        escrow.finalizeDelivery(proposalId);
+
+        TopicBountyEscrow.Proposal memory proposalAfter = escrow.getProposal(proposalId);
+        assertEq(token.balanceOf(user1), balanceBefore + proposalBefore.remaining90);
+        assertEq(uint8(proposalAfter.status), uint8(TopicBountyEscrow.ProposalStatus.Completed));
+    }
+
+    function test_FinalizeDeliveryBeforeWindowReverts() public {
+        address[] memory owners = new address[](3);
+        owners[0] = user1;
+        owners[1] = user2;
+        owners[2] = user3;
+
+        uint64 startTime = uint64(block.timestamp);
+        uint64 endTime = uint64(block.timestamp + 1 days);
+        uint256 proposalId = escrow.createProposal(owners, startTime, endTime);
+
+        token.mint(user1, 10 ether);
+        vm.startPrank(user1);
+        token.approve(address(escrow), 10 ether);
+        escrow.stakeVote(proposalId, 0, 10 ether);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 2 days);
+        escrow.finalizeVoting(proposalId);
+        escrow.confirmWinnerAndPay10(proposalId);
+
+        vm.prank(user1);
+        escrow.submitDelivery(proposalId, keccak256("url"), keccak256("vid"), keccak256("pin"));
+
+        vm.warp(block.timestamp + 1 hours);
+        vm.expectRevert("TopicBountyEscrow: challenge window open");
+        escrow.finalizeDelivery(proposalId);
+    }
+
+    function test_ExpireIfNoSubmissionTransfersToTreasury() public {
+        address[] memory owners = new address[](3);
+        owners[0] = user1;
+        owners[1] = user2;
+        owners[2] = user3;
+
+        uint64 startTime = uint64(block.timestamp);
+        uint64 endTime = uint64(block.timestamp + 1 days);
+        uint256 proposalId = escrow.createProposal(owners, startTime, endTime);
+
+        token.mint(user2, 40 ether);
+        vm.startPrank(user2);
+        token.approve(address(escrow), 40 ether);
+        escrow.stakeVote(proposalId, 1, 40 ether);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 2 days);
+        escrow.finalizeVoting(proposalId);
+        escrow.confirmWinnerAndPay10(proposalId);
+
+        TopicBountyEscrow.Proposal memory proposalBefore = escrow.getProposal(proposalId);
+        uint256 treasuryBefore = token.balanceOf(treasury);
+
+        vm.warp(block.timestamp + 15 days);
+        escrow.expireIfNoSubmission(proposalId);
+
+        TopicBountyEscrow.Proposal memory proposalAfter = escrow.getProposal(proposalId);
+        assertEq(token.balanceOf(treasury), treasuryBefore + proposalBefore.remaining90);
+        assertEq(uint8(proposalAfter.status), uint8(TopicBountyEscrow.ProposalStatus.Expired));
+    }
+
+    function test_ExpireIfNoSubmissionBeforeDeadlineReverts() public {
+        address[] memory owners = new address[](3);
+        owners[0] = user1;
+        owners[1] = user2;
+        owners[2] = user3;
+
+        uint64 startTime = uint64(block.timestamp);
+        uint64 endTime = uint64(block.timestamp + 1 days);
+        uint256 proposalId = escrow.createProposal(owners, startTime, endTime);
+
+        token.mint(user2, 10 ether);
+        vm.startPrank(user2);
+        token.approve(address(escrow), 10 ether);
+        escrow.stakeVote(proposalId, 1, 10 ether);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 2 days);
+        escrow.finalizeVoting(proposalId);
+        escrow.confirmWinnerAndPay10(proposalId);
+
+        vm.warp(block.timestamp + 7 days);
+        vm.expectRevert("TopicBountyEscrow: submit deadline not reached");
+        escrow.expireIfNoSubmission(proposalId);
+    }
+
+    function test_ChallengeDeliverySuccess() public {
+        address[] memory owners = new address[](3);
+        owners[0] = user1;
+        owners[1] = user2;
+        owners[2] = user3;
+
+        uint64 startTime = uint64(block.timestamp);
+        uint64 endTime = uint64(block.timestamp + 1 days);
+        uint256 proposalId = escrow.createProposal(owners, startTime, endTime);
+
+        token.mint(user1, 10 ether);
+        vm.startPrank(user1);
+        token.approve(address(escrow), 10 ether);
+        escrow.stakeVote(proposalId, 0, 10 ether);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 2 days);
+        escrow.finalizeVoting(proposalId);
+        escrow.confirmWinnerAndPay10(proposalId);
+
+        vm.prank(user1);
+        escrow.submitDelivery(proposalId, keccak256("url"), keccak256("vid"), keccak256("pin"));
+
+        token.mint(user2, 10_000 ether);
+        vm.startPrank(user2);
+        token.approve(address(escrow), 10_000 ether);
+        escrow.challengeDelivery(proposalId, keccak256("reason"), keccak256("evidence"));
+        vm.stopPrank();
+
+        TopicBountyEscrow.Proposal memory proposal = escrow.getProposal(proposalId);
+        assertEq(uint8(proposal.status), uint8(TopicBountyEscrow.ProposalStatus.Disputed));
+        assertEq(proposal.challenger, user2);
+        assertEq(proposal.reasonHash, keccak256("reason"));
+        assertEq(proposal.evidenceHash, keccak256("evidence"));
+    }
+
+    function test_ChallengeDeliveryWindowClosedReverts() public {
+        address[] memory owners = new address[](3);
+        owners[0] = user1;
+        owners[1] = user2;
+        owners[2] = user3;
+
+        uint64 startTime = uint64(block.timestamp);
+        uint64 endTime = uint64(block.timestamp + 1 days);
+        uint256 proposalId = escrow.createProposal(owners, startTime, endTime);
+
+        token.mint(user1, 10 ether);
+        vm.startPrank(user1);
+        token.approve(address(escrow), 10 ether);
+        escrow.stakeVote(proposalId, 0, 10 ether);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 2 days);
+        escrow.finalizeVoting(proposalId);
+        escrow.confirmWinnerAndPay10(proposalId);
+
+        vm.prank(user1);
+        escrow.submitDelivery(proposalId, keccak256("url"), keccak256("vid"), keccak256("pin"));
+
+        vm.warp(block.timestamp + 73 hours);
+        token.mint(user2, 10_000 ether);
+        vm.startPrank(user2);
+        token.approve(address(escrow), 10_000 ether);
+        vm.expectRevert("TopicBountyEscrow: challenge window closed");
+        escrow.challengeDelivery(proposalId, keccak256("reason"), keccak256("evidence"));
+        vm.stopPrank();
+    }
+
+    function test_ChallengeDeliveryCannotRepeat() public {
+        address[] memory owners = new address[](3);
+        owners[0] = user1;
+        owners[1] = user2;
+        owners[2] = user3;
+
+        uint64 startTime = uint64(block.timestamp);
+        uint64 endTime = uint64(block.timestamp + 1 days);
+        uint256 proposalId = escrow.createProposal(owners, startTime, endTime);
+
+        token.mint(user1, 10 ether);
+        vm.startPrank(user1);
+        token.approve(address(escrow), 10 ether);
+        escrow.stakeVote(proposalId, 0, 10 ether);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 2 days);
+        escrow.finalizeVoting(proposalId);
+        escrow.confirmWinnerAndPay10(proposalId);
+
+        vm.prank(user1);
+        escrow.submitDelivery(proposalId, keccak256("url"), keccak256("vid"), keccak256("pin"));
+
+        token.mint(user2, 10_000 ether);
+        vm.startPrank(user2);
+        token.approve(address(escrow), 10_000 ether);
+        escrow.challengeDelivery(proposalId, keccak256("reason"), keccak256("evidence"));
+        vm.expectRevert("TopicBountyEscrow: already disputed");
+        escrow.challengeDelivery(proposalId, keccak256("reason2"), keccak256("evidence2"));
+        vm.stopPrank();
+    }
+
+    function test_ResolveDisputeApprovePaysWinnerAndTreasury() public {
+        uint256 proposalId = _createDisputedProposal();
+        TopicBountyEscrow.Proposal memory proposal = escrow.getProposal(proposalId);
+        address winnerOwner = escrow.getTopic(proposalId, proposal.winnerTopicId).owner;
+
+        uint256 winnerBalanceBefore = token.balanceOf(winnerOwner);
+        uint256 treasuryBalanceBefore = token.balanceOf(treasury);
+
+        escrow.resolveDispute(proposalId, true);
+
+        assertEq(token.balanceOf(winnerOwner), winnerBalanceBefore + proposal.remaining90);
+        assertEq(token.balanceOf(treasury), treasuryBalanceBefore + 10_000 ether);
+        assertTrue(escrow.getProposal(proposalId).disputeResolved);
+    }
+
+    function test_ResolveDisputeDenyPaysTreasuryAndChallenger() public {
+        uint256 proposalId = _createDisputedProposal();
+        TopicBountyEscrow.Proposal memory proposal = escrow.getProposal(proposalId);
+
+        token.mint(treasury, 5_000 ether);
+        vm.prank(treasury);
+        token.approve(address(escrow), 5_000 ether);
+
+        uint256 treasuryBalanceBefore = token.balanceOf(treasury);
+        uint256 challengerBalanceBefore = token.balanceOf(user2);
+
+        escrow.resolveDispute(proposalId, false);
+
+        assertEq(
+            token.balanceOf(treasury),
+            treasuryBalanceBefore + proposal.remaining90 - 5_000 ether
+        );
+        assertEq(token.balanceOf(user2), challengerBalanceBefore + 10_000 ether + 5_000 ether);
+        assertTrue(escrow.getProposal(proposalId).disputeResolved);
+    }
+
+    function test_ResolveDisputeDenyRevertsWhenAllowanceInsufficient() public {
+        uint256 proposalId = _createDisputedProposal();
+
+        vm.expectRevert("TopicBountyEscrow: treasury allowance insufficient");
+        escrow.resolveDispute(proposalId, false);
+    }
+
+    function test_ResolveDisputeOnlyOwner() public {
+        uint256 proposalId = _createDisputedProposal();
+
+        vm.prank(user1);
+        vm.expectRevert();
+        escrow.resolveDispute(proposalId, true);
     }
 }
