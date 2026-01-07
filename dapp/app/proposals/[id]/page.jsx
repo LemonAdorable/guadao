@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import {
   useAccount,
@@ -200,7 +200,7 @@ export default function ProposalDetailPage() {
     };
   }, [publicClient]);
 
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     if (!publicClient || !isAddress(escrowAddress) || proposalIdValue === null) {
       return;
     }
@@ -237,7 +237,7 @@ export default function ProposalDetailPage() {
     } catch (error) {
       console.error('Fetch events failed', error);
     }
-  };
+  }, [publicClient, escrowAddress, proposalIdValue, activeChainConfig]);
 
   // Auto-load events
   useEffect(() => {
@@ -245,7 +245,7 @@ export default function ProposalDetailPage() {
     fetchEvents().then(() => {
       // Initial load
     });
-  }, [publicClient, escrowAddress, proposalIdValue]);
+  }, [fetchEvents]);
 
 
   // Proposal data
