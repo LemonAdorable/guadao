@@ -215,7 +215,7 @@ export default function ProposalDetailPage() {
             address: escrowAddress,
             event,
             args: { proposalId: proposalIdValue },
-            fromBlock: activeChainConfig?.startBlock ? BigInt(activeChainConfig.startBlock) : 'earliest',
+            fromBlock: activeChainConfig?.startBlock ? BigInt(activeChainConfig.startBlock) : 0n,
           })
         )
       );

@@ -76,7 +76,7 @@ export default function ProfilePage() {
                     address: airdropAddress,
                     event: parseAbi(['event Claimed(address indexed to, uint256 amount)'])[0],
                     args: { to: address },
-                    fromBlock: chainConfig?.startBlock ? BigInt(chainConfig.startBlock) : 'earliest',
+                    fromBlock: chainConfig?.startBlock ? BigInt(chainConfig.startBlock) : 0n,
                 });
 
                 const mapped = logs.map((log) => ({
@@ -96,7 +96,7 @@ export default function ProfilePage() {
         if (isConnected) {
             loadAirdrops();
         }
-    }, [publicClient, airdropAddress, address, isConnected]);
+    }, [publicClient, airdropAddress, address, isConnected, chainConfig]);
 
     const escrowAddress = chainConfig?.escrowAddress || '';
 
@@ -114,7 +114,7 @@ export default function ProfilePage() {
                     address: escrowAddress,
                     event: ESCROW_EVENTS_ABI[0], // Voted event
                     args: { voter: address },
-                    fromBlock: chainConfig?.startBlock ? BigInt(chainConfig.startBlock) : 'earliest',
+                    fromBlock: chainConfig?.startBlock ? BigInt(chainConfig.startBlock) : 0n,
                 });
 
                 const mapped = logs.map((log) => ({
@@ -136,7 +136,7 @@ export default function ProfilePage() {
         if (isConnected) {
             loadVotes();
         }
-    }, [publicClient, escrowAddress, address, isConnected]);
+    }, [publicClient, escrowAddress, address, isConnected, chainConfig]);
 
     // 加载用户质疑记录
     useEffect(() => {
@@ -152,7 +152,7 @@ export default function ProfilePage() {
                     address: escrowAddress,
                     event: ESCROW_EVENTS_ABI[1], // DeliveryChallenged event
                     args: { challenger: address },
-                    fromBlock: chainConfig?.startBlock ? BigInt(chainConfig.startBlock) : 'earliest',
+                    fromBlock: chainConfig?.startBlock ? BigInt(chainConfig.startBlock) : 0n,
                 });
 
                 const mapped = logs.map((log) => ({
@@ -172,7 +172,7 @@ export default function ProfilePage() {
         if (isConnected) {
             loadChallenges();
         }
-    }, [publicClient, escrowAddress, address, isConnected]);
+    }, [publicClient, escrowAddress, address, isConnected, chainConfig]);
 
     // 加载用户的 Topic
     useEffect(() => {
@@ -187,7 +187,7 @@ export default function ProfilePage() {
                 const logs = await publicClient.getLogs({
                     address: escrowAddress,
                     event: ESCROW_EVENTS_ABI[2], // ProposalCreated event
-                    fromBlock: chainConfig?.startBlock ? BigInt(chainConfig.startBlock) : 'earliest',
+                    fromBlock: chainConfig?.startBlock ? BigInt(chainConfig.startBlock) : 0n,
                 });
 
                 const userTopics = [];
@@ -218,7 +218,7 @@ export default function ProfilePage() {
         if (isConnected) {
             loadTopics();
         }
-    }, [publicClient, escrowAddress, address, isConnected]);
+    }, [publicClient, escrowAddress, address, isConnected, chainConfig]);
 
     return (
         <main className="layout">
