@@ -159,12 +159,19 @@ export default function ProposalDetailPage() {
 
   const chainMismatch = isConnected && targetChainId && chainId !== targetChainId;
 
+  // Sync targetChainId with wallet chainId
+  useEffect(() => {
+    if (chainId && chainOptions.some(c => c.id === chainId)) {
+      setTargetChainId(chainId);
+    }
+  }, [chainId, chainOptions]);
+
   // Initialize addresses from config
   useEffect(() => {
     const active = chainOptions.find((item) => item.id === Number(targetChainId));
     if (!active) return;
-    setEscrowAddress((current) => current || active.escrowAddress || '');
-    setGuaTokenAddress((current) => current || active.guaTokenAddress || '');
+    setEscrowAddress(active.escrowAddress || '');
+    setGuaTokenAddress(active.guaTokenAddress || '');
   }, [chainOptions, targetChainId]);
 
   // Update chain time

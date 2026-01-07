@@ -24,9 +24,9 @@
     },
     "84532": {
       "label": "Base Sepolia",
-      "airdropAddress": "",
-      "escrowAddress": "",
-      "guaTokenAddress": "",
+      "airdropAddress": "0x9b40014cc0b2ef7861ef318a242f0e9051caa979",
+      "escrowAddress": "0x09ffd59910d17aa85598f362fcbec05b35978319",
+      "guaTokenAddress": "0x13ce0501266fdfd25fda8befe8a92815d1a5af08",
       "proofsUrl": "/merkle/proofs.json",
       "rpcUrl": "https://sepolia.base.org",
       "explorerUrl": "https://sepolia.basescan.org"

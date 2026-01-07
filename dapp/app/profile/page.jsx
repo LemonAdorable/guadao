@@ -33,6 +33,13 @@ export default function ProfilePage() {
     const { t } = useI18n();
     const chainOptions = useMemo(getChainOptions, []);
     const [targetChainId, setTargetChainId] = useState(defaultChainId || '');
+
+    // Sync targetChainId with wallet chainId
+    useEffect(() => {
+        if (chainId && chainOptions.some(c => c.id === chainId)) {
+            setTargetChainId(chainId);
+        }
+    }, [chainId, chainOptions]);
     const [votes, setVotes] = useState([]);
     const [challenges, setChallenges] = useState([]);
     const [topics, setTopics] = useState([]);

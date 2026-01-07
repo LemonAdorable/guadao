@@ -80,10 +80,17 @@ export default function AdminPage() {
 
 
 
+  // Sync targetChainId with wallet chainId
+  useEffect(() => {
+    if (chainId && chainOptions.some(c => c.id === chainId)) {
+      setTargetChainId(chainId);
+    }
+  }, [chainId, chainOptions]);
+
   useEffect(() => {
     const active = chainOptions.find((item) => item.id === Number(targetChainId));
     if (!active) return;
-    setEscrowAddress((current) => current || active.escrowAddress || '');
+    setEscrowAddress(active.escrowAddress || '');
   }, [chainOptions, targetChainId]);
 
   useEffect(() => {

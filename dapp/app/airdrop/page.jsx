@@ -96,11 +96,19 @@ export default function AirdropPage() {
     },
   });
 
+  // Sync targetChainId with wallet chainId
+  useEffect(() => {
+    if (chainId && chainOptions.some(c => c.id === chainId)) {
+      setTargetChainId(chainId);
+    }
+  }, [chainId, chainOptions]);
+
+  // Update contract addresses when targetChainId changes
   useEffect(() => {
     const active = chainOptions.find((item) => item.id === Number(targetChainId));
     if (!active) return;
-    setContractAddress((current) => current || active.airdropAddress || '');
-    setProofsUrl((current) => current || active.proofsUrl || '');
+    setContractAddress(active.airdropAddress || '');
+    setProofsUrl(active.proofsUrl || '');
   }, [chainOptions, targetChainId]);
 
   // 自动加载 proofs.json（非高级模式下）

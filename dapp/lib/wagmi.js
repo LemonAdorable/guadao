@@ -29,11 +29,11 @@ const connectors = [
   injected(),
   ...(projectId
     ? [
-        walletConnect({
-          projectId,
-          showQrModal: false,
-        }),
-      ]
+      walletConnect({
+        projectId,
+        showQrModal: false,
+      }),
+    ]
     : []),
   coinbaseWallet({
     appName: 'GUA Airdrop Claim',

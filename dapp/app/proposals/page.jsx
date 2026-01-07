@@ -64,12 +64,17 @@ export default function ProposalsPage() {
     return chainOptions.find((item) => item.id === Number(targetChainId));
   }, [chainOptions, targetChainId]);
 
+  // Sync targetChainId with wallet chainId
+  useEffect(() => {
+    if (chainId && chainOptions.some(c => c.id === chainId)) {
+      setTargetChainId(chainId);
+    }
+  }, [chainId, chainOptions]);
+
   // Initialize escrow address from config
   useEffect(() => {
     if (!activeChainConfig) return;
-    if (activeChainConfig.escrowAddress) {
-      setEscrowAddress(activeChainConfig.escrowAddress);
-    }
+    setEscrowAddress(activeChainConfig.escrowAddress || '');
   }, [activeChainConfig]);
 
   // Auto-load proposals when address is available
