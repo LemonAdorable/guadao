@@ -55,18 +55,8 @@ function main() {
      * 2. GUAToken Proxy      <-- Index 1
      * 3. MerkleAirdrop Impl
      * 4. MerkleAirdrop Proxy <-- Index 3
-     * 5. TopicBountyEscrow Impl (注意：中间可能有 Call 交易，但在 creations 数组里是连续的吗？)
-     *    Wait, creations 数组里只包含 CREATE。
-     *    Call 交易 (grantRole 等) 不在 creations 里。
-     *    所以顺序是:
-     *    [0] GUAToken Impl
-     *    [1] GUAToken Proxy
-     *    [2] MerkleAirdrop Impl
-     *    [3] MerkleAirdrop Proxy
-     *    [4] TopicBountyEscrow Impl
-     *    [5] TopicBountyEscrow Proxy
-     * 
-     *    前提是中间没有任何其他合约被 new 出来。
+     * 5. TopicBountyEscrow Impl
+     * 6. TopicBountyEscrow Proxy <-- Index 5
      */
 
     if (creations.length < 6) {
@@ -94,21 +84,51 @@ function main() {
     const ownerAddress = getParamAddress(escrowInitData, 1); // 2nd param
     const treasuryAddress = getParamAddress(escrowInitData, 2); // 3rd param
 
-    console.log(`🔍 提取合约地址:`);
+    // Extract startBlock (block number of the first creation - GUAToken)
+    // The previous attempt used creations[0].blockNumber which might be null in 'transactions'.
+    // Typically in run-latest.json, blockNumber for deployment is in 'receipts'.
+    // Or we can look at `receipts` array if it exists at root level.
+
+    let startBlock = 0;
+    if (runData.receipts && runData.receipts.length > 0) {
+        // receipts is an array corresponding to transactions? 
+        // usually receipts is keyed by tx hash or is a list. 
+        // Forge broadcast structure: 
+        // "receipts": [ { "transactionHash": "...", "blockNumber": "0x..." } ]
+        // Let's try to find the receipt for the first creation transaction.
+        const firstTxHash = creations[0].hash;
+        const receipt = runData.receipts.find(r => r.transactionHash === firstTxHash);
+        if (receipt && receipt.blockNumber) {
+            startBlock = parseInt(receipt.blockNumber, 16);
+        }
+    } else {
+        // Fallback: sometimes transactions have blockNumber if included
+        if (creations[0].blockNumber) {
+            startBlock = parseInt(creations[0].blockNumber, 16);
+        }
+    }
+
+    if (!startBlock || isNaN(startBlock)) {
+        console.warn('⚠️ 警告: 无法从日志中提取 StartBlock，配置中将不包含 startBlock');
+        startBlock = 0; // Skip
+    }
+
+    console.log(`🔍 提取部署信息:`);
     console.log(`   - GUAToken:     ${guaTokenAddress}`);
     console.log(`   - MerkleAirdrop: ${airdropAddress}`);
     console.log(`   - Escrow:       ${escrowAddress}`);
     console.log(`   - Owner:        ${ownerAddress}`);
     console.log(`   - Treasury:     ${treasuryAddress}`);
+    console.log(`   - StartBlock:   ${startBlock || 'Not Found'}`);
 
     // 更新 dapp/config.json
-    updateDappConfig(chainId, guaTokenAddress, airdropAddress, escrowAddress);
+    updateDappConfig(chainId, guaTokenAddress, airdropAddress, escrowAddress, startBlock);
 
     // 更新 README.md
     updateReadme(chainId, guaTokenAddress, airdropAddress, escrowAddress, ownerAddress, treasuryAddress);
 }
 
-function updateDappConfig(chainId, guaToken, airdrop, escrow) {
+function updateDappConfig(chainId, guaToken, airdrop, escrow, startBlock) {
     try {
         const config = JSON.parse(fs.readFileSync(DAPP_CONFIG_PATH, 'utf-8'));
 
@@ -120,6 +140,9 @@ function updateDappConfig(chainId, guaToken, airdrop, escrow) {
         config.chains[chainId].guaTokenAddress = guaToken;
         config.chains[chainId].airdropAddress = airdrop;
         config.chains[chainId].escrowAddress = escrow;
+        if (startBlock) {
+            config.chains[chainId].startBlock = startBlock;
+        }
 
         fs.writeFileSync(DAPP_CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');
         console.log(`✅ 已更新 dapp/config.json`);
