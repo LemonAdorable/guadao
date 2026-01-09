@@ -218,16 +218,40 @@ export default function ProposalDetailPage() {
       // Don't set global loading status here to avoid flickering logic,
       // or key it differently. For now, we only set 'loaded' or 'error'.
       // If we are refreshing, we might not want to show full page loading state.
-      const logs = await Promise.all(
-        ESCROW_EVENTS_ABI.map((event) =>
-          publicClient.getLogs({
-            address: escrowAddress,
-            event,
-            args: { proposalId: proposalIdValue },
-            fromBlock: activeChainConfig?.startBlock ? BigInt(activeChainConfig.startBlock) : 0n,
-          })
-        )
+
+      const currentBlock = await publicClient.getBlockNumber();
+      const startBlock = activeChainConfig?.startBlock ? BigInt(activeChainConfig.startBlock) : 0n;
+      const CHUNK_SIZE = 50000n;
+
+      const chunks = [];
+      for (let i = startBlock; i <= currentBlock; i += CHUNK_SIZE) {
+        const toBlock = i + CHUNK_SIZE - 1n < currentBlock ? i + CHUNK_SIZE - 1n : currentBlock;
+        chunks.push({ from: i, to: toBlock });
+      }
+
+      const logsResults = await Promise.all(
+        ESCROW_EVENTS_ABI.map(async (event) => {
+          const eventLogs = await Promise.all(
+            chunks.map(async ({ from, to }) => {
+              try {
+                return await publicClient.getLogs({
+                  address: escrowAddress,
+                  event,
+                  args: { proposalId: proposalIdValue },
+                  fromBlock: from,
+                  toBlock: to
+                });
+              } catch (e) {
+                console.warn(`Failed to fetch event logs range ${from}-${to}`, e);
+                return [];
+              }
+            })
+          );
+          return eventLogs.flat();
+        })
       );
+
+      const logs = logsResults.flat();
 
       const flattened = logs.flat();
       flattened.sort((a, b) => {
