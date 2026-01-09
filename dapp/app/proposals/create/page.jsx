@@ -13,8 +13,7 @@ import {
 import { isAddress, parseAbi, parseEther } from 'viem';
 import { uploadToIPFS, cidToBytes32, createTopicContent } from '../../../lib/ipfs';
 
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MarkdownRenderer from '../../components/MarkdownRenderer';
 import TextareaAutosize from 'react-textarea-autosize';
 
 import { defaultChainId, getChainOptions } from '../../../lib/appConfig';
@@ -409,9 +408,9 @@ export default function CreateProposalPage() {
                                 minHeight: '200px',
                                 background: '#fffaf2'
                             }}>
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                <MarkdownRenderer>
                                     {proposalDescription || '_No description_'}
-                                </ReactMarkdown>
+                                </MarkdownRenderer>
                             </div>
                         ) : (
                             <TextareaAutosize
@@ -519,9 +518,9 @@ export default function CreateProposalPage() {
                                 minHeight: '200px',
                                 background: '#fffaf2'
                             }}>
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                <MarkdownRenderer>
                                     {topics[activeTopicIndex].description || '_No description_'}
-                                </ReactMarkdown>
+                                </MarkdownRenderer>
                             </div>
                         ) : (
                             <TextareaAutosize

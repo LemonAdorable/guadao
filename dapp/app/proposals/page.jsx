@@ -61,6 +61,12 @@ export default function ProposalsPage() {
   const [historyProposals, setHistoryProposals] = useState([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Pagination State
+  const [allLogs, setAllLogs] = useState([]);
+  const [loadedCount, setLoadedCount] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const BATCH_SIZE = 12;
+
   const { isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChainAsync, isPending: isSwitching } = useSwitchChain();
@@ -86,31 +92,31 @@ export default function ProposalsPage() {
     setEscrowAddress(activeChainConfig.escrowAddress || '');
   }, [activeChainConfig]);
 
-  // Auto-load proposals when address is available
+  // Reset state when chain/address changes
   useEffect(() => {
-    const loadProposals = async () => {
-      if (!isAddress(escrowAddress)) {
-        return;
-      }
-      if (chainMismatch) {
-        return;
-      }
+    setAllLogs([]);
+    setActiveProposals([]);
+    setHistoryProposals([]);
+    setLoadedCount(0);
+    setStatus(statusReady());
+  }, [targetChainId, escrowAddress]);
 
-      // 使用 wagmi client 或创建备用 client
+  // Step 1: Fetch ALL logs (lightweight)
+  useEffect(() => {
+    const fetchLogs = async () => {
+      if (!isAddress(escrowAddress) || chainMismatch) return;
+
+      // Get Client
       let client = wagmiPublicClient;
       if (!client && activeChainConfig?.rpcUrl) {
         try {
-          client = createPublicClient({
-            chain: anvil,
-            transport: http(activeChainConfig.rpcUrl),
-          });
+          client = createPublicClient({ chain: anvil, transport: http(activeChainConfig.rpcUrl) });
         } catch (e) {
           console.error('Failed to create fallback client:', e);
           setStatus(statusNoRpc());
           return;
         }
       }
-
       if (!client) {
         setStatus(statusNoRpc());
         return;
@@ -124,86 +130,118 @@ export default function ProposalsPage() {
           fromBlock: activeChainConfig?.startBlock ? BigInt(activeChainConfig.startBlock) : 0n,
         });
 
-        // Fetch details for each proposal to get status
-        const details = await Promise.all(
-          logs.map(async (log) => {
-            const pid = log.args?.proposalId;
-            let currentStatus = 0;
-            let title = '';
-
-            try {
-              const data = await client.readContract({
-                address: escrowAddress,
-                abi: ESCROW_EVENTS_ABI, // using extended ABI
-                functionName: 'getProposal',
-                args: [pid],
-              });
-              // Proposal struct: status is at index 3 (uint8)
-              // metadata is at index 23 (bytes32)
-              currentStatus = Number(data[3]);
-              const metadataHash = data[23];
-
-              // Try to fetch title from IPFS if hash exists
-              if (metadataHash && metadataHash !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-                try {
-                  // We don't block the UI for IPFS fetch, but here we do it naively for simplicity
-                  // In a real optimized app, this would be a separate hook/cache
-                  const cid = bytes32ToCid(metadataHash);
-                  const content = await fetchFromIPFS(cid);
-                  if (content && content.title) {
-                    title = content.title;
-                  }
-                } catch (e) {
-                  // Ignore IPFS fetch errors
-                }
-              }
-            } catch (err) {
-              console.error('Failed to fetch proposal details', pid, err);
-            }
-
-            // DEBUG LOGS
-            console.log(`[Proposal ${pid}] Metadata Hash:`, log.args?.metadata || 'N/A');
-            console.log(`[Proposal ${pid}] Fetched Title:`, title);
-
-            return {
-              id: pid?.toString() ?? '-1',
-              startTime: log.args?.startTime,
-              endTime: log.args?.endTime,
-              blockNumber: log.blockNumber,
-              txHash: log.transactionHash,
-              status: currentStatus,
-              title: title, // Provide fetched title
-            };
-          })
-        );
-
-        // Sort by id descending (newest first)
-        details.sort((a, b) => Number(b.id) - Number(a.id));
-
-        // Split: 6=Completed, 7=Denied, 8=Expired => History
-        const active = [];
-        const history = [];
-
-        details.forEach((p) => {
-          if (p.status >= 6) {
-            history.push(p);
-          } else {
-            active.push(p);
-          }
+        // Sort desc by proposalId (assuming generic sorting by ID/Block is sufficient)
+        // We use proposalId from args if available, or blockNumber as proxy
+        logs.sort((a, b) => {
+          const idA = a.args?.proposalId ? Number(a.args.proposalId) : 0;
+          const idB = b.args?.proposalId ? Number(b.args.proposalId) : 0;
+          return idB - idA;
         });
 
-        setActiveProposals(active);
-        setHistoryProposals(history);
+        setAllLogs(logs);
 
-        setStatus(details.length ? statusLoaded() : statusEmpty());
+        if (logs.length === 0) {
+          setStatus(statusEmpty());
+        }
+        // Step 2 will be triggered by useEffect depending on allLogs
       } catch (error) {
+        console.error("Log fetch error:", error);
         const message = error?.shortMessage || error?.message || 'Load failed';
         setStatus(statusError('status.error', { message }));
       }
     };
 
-    loadProposals();
+    fetchLogs();
   }, [wagmiPublicClient, escrowAddress, chainMismatch, activeChainConfig]);
+
+  // Step 2 working function: Fetch details for a batch
+  const loadNextBatch = async (logsToProcess) => {
+    // Get Client (Re-create logic briefly or assume valid from previous step, but safer to get again)
+    let client = wagmiPublicClient;
+    if (!client && activeChainConfig?.rpcUrl) {
+      client = createPublicClient({ chain: anvil, transport: http(activeChainConfig.rpcUrl) });
+    }
+    if (!client) return;
+
+    setIsLoadingMore(true);
+
+    try {
+      const details = await Promise.all(
+        logsToProcess.map(async (log) => {
+          const pid = log.args?.proposalId;
+          let currentStatus = 0;
+          let title = '';
+
+          try {
+            const data = await client.readContract({
+              address: escrowAddress,
+              abi: ESCROW_EVENTS_ABI,
+              functionName: 'getProposal',
+              args: [pid],
+            });
+            currentStatus = Number(data[3]);
+            const metadataHash = data[23];
+
+            // Optimistic IPFS fetch (non-blocking for batch, but we await for simplicity in this MVP)
+            if (metadataHash && metadataHash !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+              try {
+                const cid = bytes32ToCid(metadataHash);
+                const content = await fetchFromIPFS(cid);
+                if (content && content.title) {
+                  title = content.title;
+                }
+              } catch (e) { /* ignore */ }
+            }
+          } catch (err) {
+            console.error('Failed to fetch proposal details', pid, err);
+          }
+
+          return {
+            id: pid?.toString() ?? '-1',
+            startTime: log.args?.startTime,
+            endTime: log.args?.endTime,
+            blockNumber: log.blockNumber,
+            txHash: log.transactionHash,
+            status: currentStatus,
+            title: title,
+          };
+        })
+      );
+
+      // Distribute to Active/History
+      const newActive = [];
+      const newHistory = [];
+      details.forEach(p => {
+        if (p.status >= 6) newHistory.push(p); // 6=Completed ...
+        else newActive.push(p);
+      });
+
+      setActiveProposals(prev => [...prev, ...newActive]);
+      setHistoryProposals(prev => [...prev, ...newHistory]);
+
+      setLoadedCount(prev => prev + logsToProcess.length);
+      setStatus(statusLoaded()); // Ensure status is loaded
+    } catch (err) {
+      console.error("Batch load error", err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  // Step 2 Trigger: Initial Load
+  useEffect(() => {
+    if (allLogs.length > 0 && loadedCount === 0 && !isLoadingMore) {
+      const firstBatch = allLogs.slice(0, BATCH_SIZE);
+      loadNextBatch(firstBatch);
+    }
+  }, [allLogs, loadedCount, isLoadingMore]);
+
+  // Handler for manual "Load More"
+  const handleLoadMore = () => {
+    if (loadedCount >= allLogs.length || isLoadingMore) return;
+    const nextBatch = allLogs.slice(loadedCount, loadedCount + BATCH_SIZE);
+    loadNextBatch(nextBatch);
+  };
 
   const handleSwitchChain = async () => {
     if (!targetChainId) return;
@@ -255,7 +293,7 @@ export default function ProposalsPage() {
           </div>
           <div className="status-row">
             <span>{t('proposals.list.title')}</span>
-            <span>{activeProposals.length + historyProposals.length}</span>
+            <span>{allLogs.length > 0 ? allLogs.length : '-'}</span>
           </div>
           <p className="hint">{t('proposals.lede')}</p>
           <div style={{ marginTop: '1rem' }}>
@@ -334,6 +372,19 @@ export default function ProposalsPage() {
             {historyProposals.map(renderProposalCard)}
           </div>
         </section>
+      )}
+
+      {/* Load More Button */}
+      {allLogs.length > loadedCount && (
+        <div style={{ textAlign: 'center', margin: '2rem 0' }}>
+          <button
+            className="btn secondary"
+            onClick={handleLoadMore}
+            disabled={isLoadingMore}
+          >
+            {isLoadingMore ? t('ui.loading') || 'Loading...' : `${t('ui.loadMore') || 'Load More'} (${loadedCount}/${allLogs.length})`}
+          </button>
+        </div>
       )}
     </main>
   );

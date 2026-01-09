@@ -14,8 +14,7 @@ import { isAddress, parseAbi, formatUnits, parseUnits, keccak256, toHex } from '
 
 import { defaultChainId, getChainOptions } from '../../../lib/appConfig';
 import { bytes32ToCid, fetchFromIPFS } from '../../../lib/ipfs';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MarkdownRenderer from '../../components/MarkdownRenderer';
 import {
   statusReady,
   statusLoading,
@@ -723,11 +722,7 @@ export default function ProposalDetailPage() {
       {proposalMetadata?.description && (
         <section className="panel">
           <h2>{t('proposals.create.description')}</h2>
-          <div className="markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {proposalMetadata.description}
-            </ReactMarkdown>
-          </div>
+          <MarkdownRenderer showToc={true}>{proposalMetadata.description}</MarkdownRenderer>
         </section>
       )}
 
@@ -818,7 +813,12 @@ export default function ProposalDetailPage() {
           {/* Topic Selection */}
           <div className="status-grid">
             {topics.map((topic) => (
-              <label key={topic.id} className="status-row" style={{ alignItems: 'flex-start' }}>
+              <label
+                key={topic.id}
+                id={`topic-${topic.id}`}
+                className="status-row"
+                style={{ alignItems: 'flex-start', scrollMarginTop: '120px' }}
+              >
                 <span style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 'bold' }}>
@@ -840,7 +840,7 @@ export default function ProposalDetailPage() {
                   </div>
 
                   {expandedTopics[topic.id] && topic.description && (
-                    <div className="markdown-body" style={{
+                    <div style={{
                       fontSize: '0.9em',
                       marginTop: '4px',
                       padding: '12px',
@@ -848,9 +848,7 @@ export default function ProposalDetailPage() {
                       borderRadius: '8px',
                       border: '1px solid rgba(0,0,0,0.05)'
                     }}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {topic.description}
-                      </ReactMarkdown>
+                      <MarkdownRenderer>{topic.description}</MarkdownRenderer>
                     </div>
                   )}
 

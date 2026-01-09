@@ -319,6 +319,14 @@ const translations = {
     'proposals.create.submit': '创建提案',
     'proposals.create.submitting': '提交中...',
     'proposals.create.success': '提案创建成功！',
+    // Wallet
+    'wallet.connect': '连接钱包',
+    'wallet.disconnect': '断开连接',
+    'markdown.copy': '复制',
+    'markdown.copied': '已复制',
+    'markdown.toc': '目录',
+    'ui.loading': '加载中...',
+    'ui.loadMore': '加载更多',
   },
   en: {
     'nav.home': 'Home',
@@ -638,6 +646,14 @@ const translations = {
     'proposals.create.submit': 'Create Proposal',
     'proposals.create.submitting': 'Submitting...',
     'proposals.create.success': 'Proposal created successfully!',
+    // Wallet
+    'wallet.connect': 'Connect Wallet',
+    'wallet.disconnect': 'Disconnect',
+    'markdown.copy': 'Copy',
+    'markdown.copied': 'Copied',
+    'markdown.toc': 'Table of Contents',
+    'ui.loading': 'Loading...',
+    'ui.loadMore': 'Load More',
   },
 };
 

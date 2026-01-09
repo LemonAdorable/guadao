@@ -31,7 +31,7 @@ export function validateTopicContent(content: Partial<TopicContent>): content is
     if (!content.title || typeof content.title !== 'string' || content.title.length > 100) return false;
     if (!content.creator || !/^0x[a-fA-F0-9]{40}$/.test(content.creator)) return false;
     if (!content.timestamp || typeof content.timestamp !== 'number') return false;
-    if (content.description && content.description.length > 2000) return false;
+    if (content.description && content.description.length > 10000) return false;
     return true;
 }
 

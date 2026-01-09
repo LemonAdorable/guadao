@@ -1,16 +1,13 @@
 "use client";
 
 import Link from 'next/link';
-import { ConnectKitButton } from 'connectkit';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 
 import { useI18n } from './LanguageProvider';
 import { useAdmin } from './AdminProvider';
 import NetworkStatus from './NetworkStatus';
 import TokenBalance from '../../components/TokenBalance';
-
-const shortAddress = (address) =>
-  address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '-';
 
 export default function SiteHeader() {
   const { address, isConnected } = useAccount();
@@ -43,16 +40,20 @@ export default function SiteHeader() {
         <button className="lang-toggle" type="button" onClick={toggleLang}>
           {lang === 'zh' ? t('lang.en') : t('lang.zh')}
         </button>
-        <ConnectKitButton.Custom>
-          {({ show }) => (
-            <button className="btn primary" onClick={show}>
-              {isConnected ? shortAddress(address) : 'Connect Wallet'}
+        <ConnectButton.Custom>
+          {({ account, openConnectModal, openAccountModal }) => (
+            <button
+              className="btn primary"
+              onClick={account ? openAccountModal : openConnectModal}
+            >
+              {account
+                ? `${account.address.slice(0, 6)}...${account.address.slice(-4)}`
+                : t('wallet.connect')}
             </button>
           )}
-        </ConnectKitButton.Custom>
+        </ConnectButton.Custom>
       </div>
       <NetworkStatus />
     </header>
   );
 }
-
