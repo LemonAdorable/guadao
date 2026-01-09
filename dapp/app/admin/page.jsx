@@ -28,11 +28,13 @@ import ExplorerLink from '../components/ExplorerLink';
 import StatusNotice from '../components/StatusNotice';
 
 const ESCROW_ABI = parseAbi([
-  'function getProposal(uint256 proposalId) view returns (uint64,uint64,uint8,uint8,uint256,uint256,bool,uint256,uint256,uint256,bool,bytes32,bytes32,bytes32,uint256,bool,address,bytes32,bytes32,bool)',
-  'function createProposal(address[] topicOwners,uint64 startTime,uint64 endTime) returns (uint256)',
+  'function getProposal(uint256 proposalId) view returns (uint64,uint64,uint8,uint8,uint256,uint256,bool,uint256,uint256,uint256,bool,bytes32,bytes32,bytes32,uint256,bool,address,bytes32,bytes32,bool,address,bool,bool,bytes32)',
+  'function createProposal(address[] topicOwners,bytes32[] contentCids,bytes32 metadata,uint64 startTime,uint64 endTime) returns (uint256)',
   'function finalizeVoting(uint256 proposalId)',
   'function confirmWinnerAndPay10(uint256 proposalId)',
   'function resolveDispute(uint256 proposalId,bool approve)',
+  'function markSpam(uint256 proposalId)',
+  'function confiscateDeposit(uint256 proposalId)',
   'function pause()',
   'function unpause()',
   'function paused() view returns (bool)',

@@ -58,7 +58,10 @@ const ERC20_ABI = parseAbi([
 ]);
 
 const ESCROW_EVENTS_ABI = parseAbi([
-  'event ProposalCreated(uint256 indexed proposalId,uint64 startTime,uint64 endTime,uint256[] topicIds,address[] topicOwners)',
+  'event ProposalCreated(uint256 indexed proposalId,uint64 startTime,uint64 endTime,uint256[] topicIds,address[] topicOwners,bytes32[] contentCids,bytes32 metadata,address indexed creator)',
+  'event DepositRefunded(uint256 indexed proposalId,address indexed creator,uint256 amount)',
+  'event DepositConfiscated(uint256 indexed proposalId,address indexed creator,uint256 amount)',
+  'event ProposalMarkedSpam(uint256 indexed proposalId)',
   'event Voted(address indexed voter,uint256 indexed proposalId,uint256 indexed topicId,uint256 amount)',
   'event VotingFinalized(uint256 indexed proposalId,uint256 winnerTopicId,uint256 totalPool)',
   'event WinnerConfirmed(uint256 indexed proposalId,uint256 indexed winnerTopicId,address indexed winnerOwner,uint256 payout10,uint256 submitDeadline)',

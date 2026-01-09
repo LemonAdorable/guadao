@@ -43,10 +43,10 @@ contract UpgradeTestnet is Script {
             UniversalAirdrop universalImpl = new UniversalAirdrop();
             console.log("UniversalAirdrop Impl:", address(universalImpl));
 
-            // claimAmount: 10 GUA, maxSupply: 1M GUA
+            // claimAmount: 100,000,000 GUA (100M), maxSupply: 1,000,000,000,000,000,000 GUA (1e18)
             // Initialize with SAFE as owner
             bytes memory initData =
-                abi.encodeCall(UniversalAirdrop.initialize, (TOKEN_PROXY, owner, 10 * 1e18, 1000000 * 1e18));
+                abi.encodeCall(UniversalAirdrop.initialize, (TOKEN_PROXY, owner, 100000000 * 1e18, 1000000000000000000 * 1e18));
             ERC1967Proxy proxy = new ERC1967Proxy(address(universalImpl), initData);
             universalAirdrop = UniversalAirdrop(address(proxy));
             console.log("UniversalAirdrop Proxy:", address(universalAirdrop));
@@ -61,5 +61,39 @@ contract UpgradeTestnet is Script {
         console.logBytes(grantRoleCall);
 
         vm.stopBroadcast();
+
+        // 4. Save calldata to files for manual Safe execution
+        string memory outputDir = "safe-calldata";
+        vm.createDir(outputDir, true);
+
+        // Save Upgrade Escrow calldata
+        string memory tx1 = string.concat(
+            '{"to":"', vm.toString(ESCROW_PROXY), '",',
+            '"data":"', vm.toString(upgradeCall), '",',
+            '"description":"Upgrade TopicBountyEscrow to new implementation"}'
+        );
+        vm.writeFile(string.concat(outputDir, "/1_upgrade_escrow.json"), tx1);
+        console.log("Saved: safe-calldata/1_upgrade_escrow.json");
+
+        // Save Grant Minter Role calldata
+        string memory tx2 = string.concat(
+            '{"to":"', vm.toString(TOKEN_PROXY), '",',
+            '"data":"', vm.toString(grantRoleCall), '",',
+            '"description":"Grant MINTER_ROLE to UniversalAirdrop"}'
+        );
+        vm.writeFile(string.concat(outputDir, "/2_grant_minter_role.json"), tx2);
+        console.log("Saved: safe-calldata/2_grant_minter_role.json");
+
+        // Save summary
+        string memory summary = string.concat(
+            "=== SAFE TRANSACTIONS ===\n",
+            "UniversalAirdrop Proxy: ", vm.toString(address(universalAirdrop)), "\n",
+            "New Escrow Implementation: ", vm.toString(address(newEscrowImpl)), "\n\n",
+            "Execute these transactions in order via Gnosis Safe:\n",
+            "1. safe-calldata/1_upgrade_escrow.json\n",
+            "2. safe-calldata/2_grant_minter_role.json\n"
+        );
+        vm.writeFile(string.concat(outputDir, "/README.txt"), summary);
+        console.log("Saved: safe-calldata/README.txt");
     }
 }
