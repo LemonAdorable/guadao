@@ -136,11 +136,6 @@ function CodeBlock({ node, inline, className, children, ...props }) {
 
     const codeString = extractTextContent(children).replace(/\n$/, '');
 
-    // Handle Mermaid
-    if (!isInline && language === 'mermaid') {
-        return <Mermaid chart={codeString} />;
-    }
-
     const handleCopy = useCallback(async () => {
         try {
             await navigator.clipboard.writeText(codeString);
@@ -150,6 +145,11 @@ function CodeBlock({ node, inline, className, children, ...props }) {
             console.error('Failed to copy:', err);
         }
     }, [codeString]);
+
+    // Handle Mermaid
+    if (!isInline && language === 'mermaid') {
+        return <Mermaid chart={codeString} />;
+    }
 
     if (isInline) {
         return <code className={`inline-code ${className || ''}`} {...props}>{children}</code>;

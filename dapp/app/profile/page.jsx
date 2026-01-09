@@ -247,6 +247,7 @@ export default function ProfilePage() {
         };
 
         if (isConnected) loadCreatedProposals();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [publicClient, escrowAddress, address, isConnected, chainConfig]);
 
 
@@ -287,6 +288,7 @@ export default function ProfilePage() {
         if (isConnected) {
             loadVotes();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [publicClient, escrowAddress, address, isConnected, chainConfig]);
 
     // 加载用户质疑记录
@@ -324,6 +326,7 @@ export default function ProfilePage() {
         if (isConnected) {
             loadChallenges();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [publicClient, escrowAddress, address, isConnected, chainConfig]);
 
     // 加载用户的 Topic
@@ -371,6 +374,7 @@ export default function ProfilePage() {
         if (isConnected) {
             loadTopics();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [publicClient, escrowAddress, address, isConnected, chainConfig]);
 
     const tabs = [

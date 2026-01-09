@@ -45,8 +45,9 @@ contract UpgradeTestnet is Script {
 
             // claimAmount: 100,000,000 GUA (100M), maxSupply: 1,000,000,000,000,000,000 GUA (1e18)
             // Initialize with SAFE as owner
-            bytes memory initData =
-                abi.encodeCall(UniversalAirdrop.initialize, (TOKEN_PROXY, owner, 100000000 * 1e18, 1000000000000000000 * 1e18));
+            bytes memory initData = abi.encodeCall(
+                UniversalAirdrop.initialize, (TOKEN_PROXY, owner, 100000000 * 1e18, 1000000000000000000 * 1e18)
+            );
             ERC1967Proxy proxy = new ERC1967Proxy(address(universalImpl), initData);
             universalAirdrop = UniversalAirdrop(address(proxy));
             console.log("UniversalAirdrop Proxy:", address(universalAirdrop));
@@ -68,8 +69,12 @@ contract UpgradeTestnet is Script {
 
         // Save Upgrade Escrow calldata
         string memory tx1 = string.concat(
-            '{"to":"', vm.toString(ESCROW_PROXY), '",',
-            '"data":"', vm.toString(upgradeCall), '",',
+            '{"to":"',
+            vm.toString(ESCROW_PROXY),
+            '",',
+            '"data":"',
+            vm.toString(upgradeCall),
+            '",',
             '"description":"Upgrade TopicBountyEscrow to new implementation"}'
         );
         vm.writeFile(string.concat(outputDir, "/1_upgrade_escrow.json"), tx1);
@@ -77,8 +82,12 @@ contract UpgradeTestnet is Script {
 
         // Save Grant Minter Role calldata
         string memory tx2 = string.concat(
-            '{"to":"', vm.toString(TOKEN_PROXY), '",',
-            '"data":"', vm.toString(grantRoleCall), '",',
+            '{"to":"',
+            vm.toString(TOKEN_PROXY),
+            '",',
+            '"data":"',
+            vm.toString(grantRoleCall),
+            '",',
             '"description":"Grant MINTER_ROLE to UniversalAirdrop"}'
         );
         vm.writeFile(string.concat(outputDir, "/2_grant_minter_role.json"), tx2);
@@ -87,8 +96,12 @@ contract UpgradeTestnet is Script {
         // Save summary
         string memory summary = string.concat(
             "=== SAFE TRANSACTIONS ===\n",
-            "UniversalAirdrop Proxy: ", vm.toString(address(universalAirdrop)), "\n",
-            "New Escrow Implementation: ", vm.toString(address(newEscrowImpl)), "\n\n",
+            "UniversalAirdrop Proxy: ",
+            vm.toString(address(universalAirdrop)),
+            "\n",
+            "New Escrow Implementation: ",
+            vm.toString(address(newEscrowImpl)),
+            "\n\n",
             "Execute these transactions in order via Gnosis Safe:\n",
             "1. safe-calldata/1_upgrade_escrow.json\n",
             "2. safe-calldata/2_grant_minter_role.json\n"

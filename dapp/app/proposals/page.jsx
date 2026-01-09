@@ -234,6 +234,7 @@ export default function ProposalsPage() {
       const firstBatch = allLogs.slice(0, BATCH_SIZE);
       loadNextBatch(firstBatch);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allLogs, loadedCount, isLoadingMore]);
 
   // Search State
