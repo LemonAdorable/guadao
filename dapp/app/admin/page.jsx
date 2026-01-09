@@ -147,34 +147,41 @@ export default function AdminPage() {
     }
   };
 
-  const runAction = async (name, fn, options = {}) => {
-    // ... no changes to runAction ... 
-    const { requireProposal = true } = options;
-    // Note: proposalIdValue was not defined in the original snippet but runAction uses it. 
-    // Assuming runAction is generic. Wait, runAction uses proposalIdValue which likely came from a state I wasn't seeing or was omitted.
-    // Let's assume runAction is fine as I'm replacing code around it.
-    // Actually, looking at previous view, proposalIdValue wasn't defined in the component scope either. 
-    // Maybe it was removed? Ah, I see "proposalIdValue" in runAction in Step 421 line 154.
-    // But I don't see `proposalIdValue` state definition line 60-72.
-    // It seems `runAction` was depending on a variable that might not be there?
-    // Or maybe I missed it.
-    // Regardless, I will keep runAction as is, but I can't put "..." in replacement.
-    // I must carry over runAction content.
-
-    // Actually, I should just replace the top block and the bottom block separately to avoid re-writing runAction which I might get wrong.
-    // But replace_file_content doesn't support multiple chunks in one call properly if I use one big block.
-    // I will use multi_replace_file_content or just be careful.
-    // Let's stick to replacing the defined blocks.
-
-    // I will use a smaller replacement target focused on the specific lines.
-
-    // Block 1: Imports
-    // Block 2: State
-    // Block 3: Functions
-
-    // I'll restart this tool call to be safer with multiple chunks logic using multi_replace.
-    return;
+  const runAction = async (name, fn) => {
+    setAction(name);
+    setStatus(statusTxSubmitted());
+    try {
+      const hash = await fn();
+      setLastTxHash(hash);
+      setStatus(statusTxConfirming());
+      await publicClient.waitForTransactionReceipt({ hash });
+      setStatus(statusTxConfirmed());
+      pausedResult.refetch();
+    } catch (error) {
+      console.error(error);
+      setStatus(statusError(error.shortMessage || error.message));
+    } finally {
+      setAction('');
+    }
   };
+
+  const handlePause = () =>
+    runAction('pause', () =>
+      writeContractAsync({
+        address: escrowAddress,
+        abi: ESCROW_ABI,
+        functionName: 'pause',
+      })
+    );
+
+  const handleUnpause = () =>
+    runAction('unpause', () =>
+      writeContractAsync({
+        address: escrowAddress,
+        abi: ESCROW_ABI,
+        functionName: 'unpause',
+      })
+    );
 
 
 
