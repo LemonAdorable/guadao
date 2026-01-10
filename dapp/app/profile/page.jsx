@@ -96,6 +96,7 @@ export default function ProfilePage() {
     const [challengesStatus, setChallengesStatus] = useState(statusEmpty());
     const [topicsStatus, setTopicsStatus] = useState(statusEmpty());
     const [createdProposalsStatus, setCreatedProposalsStatus] = useState(statusEmpty());
+    const [expandedTx, setExpandedTx] = useState(null);
 
     const chainConfig = useMemo(() => {
         return chainOptions.find((c) => c.id === Number(targetChainId));
@@ -701,17 +702,66 @@ export default function ProfilePage() {
                     ) : (
                         <div className="status-grid">
                             {transactions.map((tx, index) => (
-                                <div key={`tx-${index}`} className="status-row" style={{ flexWrap: 'wrap', gap: '8px' }}>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span className="badge" style={{ fontSize: '0.75rem' }}>
-                                            {t(`profile.tx.type.${tx.type}`)}
+                                <div
+                                    key={`tx-${index}`}
+                                    className="status-row"
+                                    style={{
+                                        flexDirection: 'column',
+                                        alignItems: 'stretch',
+                                        gap: '8px',
+                                        cursor: 'pointer'
+                                    }}
+                                    onClick={() => {
+                                        setExpandedTx(prev => prev === index ? null : index);
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                            <span className="badge" style={{ fontSize: '0.75rem' }}>
+                                                {t(`profile.tx.type.${tx.type}`)}
+                                            </span>
+                                            <span>{tx.description}</span>
                                         </span>
-                                        <span>{tx.description}</span>
-                                    </span>
-                                    <span className="inline-group">
-                                        <span className="muted">#{tx.blockNumber}</span>
-                                        <ExplorerLink chainId={chainId} type="tx" value={tx.txHash} />
-                                    </span>
+                                        <span className="inline-group">
+                                            <span className="muted">#{tx.blockNumber}</span>
+                                            <span style={{ fontSize: '0.8rem' }}>{expandedTx === index ? '▲' : '▼'}</span>
+                                        </span>
+                                    </div>
+                                    {expandedTx === index && (
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '6px',
+                                                padding: '12px',
+                                                background: 'rgba(0,0,0,0.03)',
+                                                borderRadius: '8px',
+                                                fontSize: '0.9em'
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            {tx.type === 'vote' && tx.amount && tx.amount !== '-' && (
+                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span className="muted">{t('voting.amount.label')}</span>
+                                                    <span style={{ color: 'var(--accent)', fontWeight: '600' }}>{tx.amount} GUA</span>
+                                                </div>
+                                            )}
+                                            {tx.type === 'airdrop' && (
+                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span className="muted">{t('airdrop.claim.amount')}</span>
+                                                    <span style={{ color: 'var(--accent)', fontWeight: '600' }}>{tx.amount} GUA</span>
+                                                </div>
+                                            )}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span className="muted">Tx Hash</span>
+                                                <span className="inline-group">
+                                                    <span style={{ fontSize: '0.85em' }}>{tx.txHash?.slice(0, 10)}...{tx.txHash?.slice(-8)}</span>
+                                                    <CopyButton value={tx.txHash} />
+                                                    <ExplorerLink chainId={chainId} type="tx" value={tx.txHash} />
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
