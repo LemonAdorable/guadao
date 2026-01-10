@@ -16,6 +16,7 @@ import { useTheme } from '../components/ThemeProvider';
 import CopyButton from '../components/CopyButton';
 import StatusNotice from '../components/StatusNotice';
 import TokenBalance from '../../components/TokenBalance';
+import ExplorerLink from '../components/ExplorerLink';
 import Link from 'next/link';
 
 const ESCROW_ABI = parseAbi([
@@ -419,12 +420,65 @@ export default function ProfilePage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [publicClient, escrowAddress, address, isConnected, chainConfig]);
 
+    // Compute aggregated transactions from all activities
+    const transactions = useMemo(() => {
+        const txList = [];
+
+        // Add votes with txHash
+        votes.forEach((vote) => {
+            if (vote.txHash) {
+                txList.push({
+                    type: 'vote',
+                    txHash: vote.txHash,
+                    blockNumber: vote.blockNumber,
+                    description: proposalTitles[vote.proposalId]
+                        ? `${proposalTitles[vote.proposalId]} / Topic #${vote.topicId}`
+                        : `Proposal #${vote.proposalId} / Topic #${vote.topicId}`,
+                    amount: vote.amount,
+                });
+            }
+        });
+
+        // Add airdrops with txHash
+        airdrops.forEach((airdrop) => {
+            if (airdrop.txHash) {
+                txList.push({
+                    type: 'airdrop',
+                    txHash: airdrop.txHash,
+                    blockNumber: airdrop.blockNumber,
+                    description: `${airdrop.amount} GUA`,
+                    amount: airdrop.amount,
+                });
+            }
+        });
+
+        // Add challenges with txHash
+        challenges.forEach((challenge) => {
+            if (challenge.txHash) {
+                txList.push({
+                    type: 'challenge',
+                    txHash: challenge.txHash,
+                    blockNumber: challenge.blockNumber,
+                    description: proposalTitles[challenge.proposalId]
+                        ? proposalTitles[challenge.proposalId]
+                        : `Proposal #${challenge.proposalId}`,
+                });
+            }
+        });
+
+        // Sort by block number descending
+        txList.sort((a, b) => Number(b.blockNumber || 0) - Number(a.blockNumber || 0));
+
+        return txList;
+    }, [votes, airdrops, challenges, proposalTitles]);
+
     const tabs = [
         { id: 'proposals', label: t('profile.tab.proposals') },
         { id: 'topics', label: t('profile.topics') },
         { id: 'votes', label: t('profile.votes') },
         { id: 'challenges', label: t('profile.challenges') },
         { id: 'airdrops', label: t('profile.airdrops') },
+        { id: 'transactions', label: t('profile.transactions') },
     ];
 
     return (
@@ -631,6 +685,34 @@ export default function ProfilePage() {
                                     </span>
                                     <span>#{challenge.blockNumber}</span>
                                 </Link>
+                            ))}
+                        </div>
+                    )}
+                </section>
+            )}
+
+            {activeTab === 'transactions' && (
+                <section className="panel">
+                    <h2>{t('profile.transactions')}</h2>
+                    {transactions.length === 0 ? (
+                        <>
+                            <p className="muted">{t('profile.noTransactions')}</p>
+                        </>
+                    ) : (
+                        <div className="status-grid">
+                            {transactions.map((tx, index) => (
+                                <div key={`tx-${index}`} className="status-row" style={{ flexWrap: 'wrap', gap: '8px' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span className="badge" style={{ fontSize: '0.75rem' }}>
+                                            {t(`profile.tx.type.${tx.type}`)}
+                                        </span>
+                                        <span>{tx.description}</span>
+                                    </span>
+                                    <span className="inline-group">
+                                        <span className="muted">#{tx.blockNumber}</span>
+                                        <ExplorerLink chainId={chainId} type="tx" value={tx.txHash} />
+                                    </span>
+                                </div>
                             ))}
                         </div>
                     )}
