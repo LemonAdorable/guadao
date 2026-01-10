@@ -743,13 +743,13 @@ export default function ProfilePage() {
                                             {tx.type === 'vote' && tx.amount && tx.amount !== '-' && (
                                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                                     <span className="muted">{t('voting.amount.label')}</span>
-                                                    <span style={{ color: 'var(--accent)', fontWeight: '600' }}>{tx.amount} GUA</span>
+                                                    <span style={{ color: '#e74c3c', fontWeight: '600' }}>-{tx.amount} GUA</span>
                                                 </div>
                                             )}
                                             {tx.type === 'airdrop' && (
                                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                                     <span className="muted">{t('airdrop.claim.amount')}</span>
-                                                    <span style={{ color: 'var(--accent)', fontWeight: '600' }}>{tx.amount} GUA</span>
+                                                    <span style={{ color: 'var(--accent)', fontWeight: '600' }}>+{tx.amount} GUA</span>
                                                 </div>
                                             )}
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
