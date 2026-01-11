@@ -10,7 +10,7 @@ import {
     usePublicClient,
     useReadContract,
 } from 'wagmi';
-import { isAddress, parseAbi, parseEther } from 'viem';
+import { isAddress, parseAbi, parseEther, encodeAbiParameters, parseAbiParameters, parseUnits, parseAbiItem, encodeFunctionData } from 'viem';
 import { uploadToIPFS, cidToBytes32, createTopicContent } from '../../../lib/ipfs';
 
 import MarkdownRenderer from '../../components/MarkdownRenderer';
@@ -214,9 +214,104 @@ export default function CreateProposalPage() {
     };
 
     const updateAction = (index, field, value) => {
-        setActions(actions.map((a, i) =>
-            i === index ? { ...a, [field]: value } : a
-        ));
+        const newActions = [...actions];
+        let action = { ...newActions[index], [field]: value };
+
+        // --- 1. Token Transfer Logic ---
+        if (action.type === 'token') {
+            const tokenAddr = field === 'tokenAddress' ? value : action.tokenAddress;
+            const recipient = field === 'recipient' ? value : action.recipient;
+            const amount = field === 'amount' ? value : action.amount;
+            const decimals = field === 'decimals' ? value : (action.decimals || '18');
+
+            if (isAddress(tokenAddr)) action.target = tokenAddr;
+            if (isAddress(recipient) && amount) {
+                try {
+                    const units = parseUnits(amount, parseInt(decimals) || 18);
+                    const encoded = encodeAbiParameters(
+                        parseAbiParameters('address, uint256'),
+                        [recipient, units]
+                    );
+                    action.calldata = encoded;
+                } catch (e) { }
+            }
+        }
+
+        // --- 2. Custom Call Logic (Smart Signature) ---
+        if (!action.type || action.type === 'custom') {
+            // Function Signature Parsing
+            if (field === 'signature') {
+                try {
+                    let sig = value.trim();
+                    if (sig && !sig.startsWith('function')) {
+                        sig = `function ${sig}`;
+                    }
+                    // Attempt to parse using viem
+                    const parsed = parseAbiItem(sig);
+                    if (parsed && parsed.inputs) {
+                        action.abiInputs = parsed.inputs;
+                        action.args = new Array(parsed.inputs.length).fill('');
+                        action.calldata = '0x'; // Reset
+                    } else {
+                        action.abiInputs = null;
+                        action.args = null;
+                    }
+                } catch (e) {
+                    action.abiInputs = null;
+                    action.args = null;
+                }
+            }
+
+            // Input Argument Updates
+            if (field.startsWith('arg_')) {
+                const argIdx = parseInt(field.split('_')[1]);
+                if (action.args) {
+                    const newArgs = [...action.args];
+                    newArgs[argIdx] = value;
+                    action.args = newArgs;
+                }
+            }
+
+            // Auto-Encode if ABI and Args are present
+            if (action.abiInputs && action.args) {
+                try {
+                    // Check if all args have values (optional, but good UX)
+                    // Actually encodeAbiParameters might throw if args are missing/invalid
+                    const encoded = encodeAbiParameters(action.abiInputs, action.args);
+                    action.calldata = encoded;
+                } catch (e) {
+                    // Encoding failed (incomplete input), ignore
+                }
+            }
+        }
+
+        newActions[index] = action;
+        setActions(newActions);
+    };
+
+    const handleActionTypeChange = (index, newType) => {
+        const newActions = [...actions];
+        const current = newActions[index];
+        const act = { ...current, type: newType };
+
+        if (newType === 'token') {
+            act.signature = 'transfer(address,uint256)';
+            act.value = '0'; // ETH value must be 0 for token transfer
+            act.calldata = '0x';
+            // Defaults
+            act.decimals = '18';
+        } else if (newType === 'native') {
+            act.signature = '';
+            act.calldata = '0x';
+            act.target = ''; // Reset target
+            act.value = '';
+        } else {
+            // Custom
+            act.signature = '';
+            act.calldata = '0x';
+        }
+        newActions[index] = act;
+        setActions(newActions);
     };
 
     const handleApprove = async () => {
@@ -775,40 +870,134 @@ Who is working on this?`
                                 </button>
                             </div>
 
+                            {/* Action Type Selector */}
+                            <div style={{ marginBottom: '1rem', display: 'flex', gap: '8px' }}>
+                                <button
+                                    className={`btn ${(!act.type || act.type === 'custom') ? 'primary sm' : 'ghost sm'}`}
+                                    onClick={() => handleActionTypeChange(idx, 'custom')}
+                                >
+                                    {t('governance.actions.type.custom')}
+                                </button>
+                                <button
+                                    className={`btn ${act.type === 'native' ? 'primary sm' : 'ghost sm'}`}
+                                    onClick={() => handleActionTypeChange(idx, 'native')}
+                                >
+                                    {t('governance.actions.type.native')}
+                                </button>
+                                <button
+                                    className={`btn ${act.type === 'token' ? 'primary sm' : 'ghost sm'}`}
+                                    onClick={() => handleActionTypeChange(idx, 'token')}
+                                >
+                                    {t('governance.actions.type.token')}
+                                </button>
+                            </div>
+
                             <div className="form-grid">
-                                <label className="field full">
-                                    <span>{t('governance.actions.target')} (Address)</span>
-                                    <input
-                                        value={act.target}
-                                        onChange={(e) => updateAction(idx, 'target', e.target.value)}
-                                        placeholder="0x..."
-                                    />
-                                </label>
-                                <label className="field">
-                                    <span>{t('governance.actions.value')} (ETH)</span>
-                                    <input
-                                        value={act.value}
-                                        onChange={(e) => updateAction(idx, 'value', e.target.value)}
-                                        placeholder="0.0"
-                                    />
-                                </label>
-                                <label className="field">
-                                    <span>{t('governance.actions.signature')} (Optional)</span>
-                                    <input
-                                        value={act.signature}
-                                        onChange={(e) => updateAction(idx, 'signature', e.target.value)}
-                                        placeholder="e.g. transfer(address,uint256)"
-                                    />
-                                </label>
-                                <label className="field full">
-                                    <span>{t('governance.actions.calldata')} (Hex)</span>
-                                    <textarea
-                                        value={act.calldata}
-                                        onChange={(e) => updateAction(idx, 'calldata', e.target.value)}
-                                        placeholder="0x..."
-                                        style={{ fontFamily: 'monospace', fontSize: '0.85em', minHeight: '60px' }}
-                                    />
-                                </label>
+                                {act.type === 'token' ? (
+                                    <>
+                                        <label className="field full">
+                                            <span>{t('governance.actions.tokenAddress')}</span>
+                                            <input
+                                                value={act.tokenAddress || ''}
+                                                onChange={(e) => updateAction(idx, 'tokenAddress', e.target.value)}
+                                                placeholder="0x..."
+                                            />
+                                        </label>
+                                        <label className="field full">
+                                            <span>{t('governance.actions.recipient')}</span>
+                                            <input
+                                                value={act.recipient || ''}
+                                                onChange={(e) => updateAction(idx, 'recipient', e.target.value)}
+                                                placeholder="0x..."
+                                            />
+                                        </label>
+                                        <label className="field">
+                                            <span>{t('governance.actions.amount')}</span>
+                                            <input
+                                                value={act.amount || ''}
+                                                onChange={(e) => updateAction(idx, 'amount', e.target.value)}
+                                                placeholder="100.0"
+                                            />
+                                        </label>
+                                        <label className="field">
+                                            <span>{t('governance.actions.decimals')}</span>
+                                            <input
+                                                value={act.decimals || '18'}
+                                                onChange={(e) => updateAction(idx, 'decimals', e.target.value)}
+                                                type="number"
+                                            />
+                                        </label>
+                                        <label className="field full">
+                                            <span>{t('governance.actions.generatedCalldata')}</span>
+                                            <textarea
+                                                readOnly
+                                                disabled
+                                                rows="2"
+                                                value={act.calldata}
+                                                style={{ fontFamily: 'monospace', fontSize: '0.85em', opacity: 0.7 }}
+                                            />
+                                        </label>
+                                    </>
+                                ) : (
+                                    <>
+                                        <label className="field full">
+                                            <span>{t('governance.actions.target')} (Address)</span>
+                                            <input
+                                                value={act.target}
+                                                onChange={(e) => updateAction(idx, 'target', e.target.value)}
+                                                placeholder="0x..."
+                                            />
+                                        </label>
+                                        <label className="field">
+                                            <span>{t('governance.actions.value')} (ETH)</span>
+                                            <input
+                                                value={act.value}
+                                                onChange={(e) => updateAction(idx, 'value', e.target.value)}
+                                                placeholder="0.0"
+                                                disabled={act.type === 'native' ? false : false} // Just explicitly show it
+                                            />
+                                        </label>
+                                        {act.type !== 'native' && (
+                                            <label className="field full">
+                                                <span>{t('governance.actions.signature')} (Optional)</span>
+                                                <input
+                                                    value={act.signature}
+                                                    onChange={(e) => updateAction(idx, 'signature', e.target.value)}
+                                                    placeholder="e.g. transfer(address,uint256)"
+                                                />
+                                            </label>
+                                        )}
+
+                                        {/* Dynamic Inputs from Signature */}
+                                        {act.abiInputs && act.abiInputs.length > 0 && (
+                                            <div style={{ gridColumn: '1/-1', borderLeft: '2px solid var(--accent)', paddingLeft: '1rem', marginBottom: '0.5rem' }}>
+                                                <p className="hint" style={{ marginBottom: '0.5rem' }}>Auto-detected Parameters:</p>
+                                                {act.abiInputs.map((input, i) => (
+                                                    <label key={i} className="field full" style={{ marginBottom: '0.5rem' }}>
+                                                        <span style={{ fontSize: '0.85em', color: 'var(--muted)' }}>{input.name || `Param #${i + 1}`} ({input.type})</span>
+                                                        <input
+                                                            value={act.args && act.args[i] || ''}
+                                                            onChange={(e) => updateAction(idx, `arg_${i}`, e.target.value)}
+                                                            placeholder={input.type}
+                                                        />
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {act.type !== 'native' && (
+                                            <label className="field full">
+                                                <span>{t('governance.actions.calldata')} (Hex)</span>
+                                                <textarea
+                                                    value={act.calldata}
+                                                    onChange={(e) => updateAction(idx, 'calldata', e.target.value)}
+                                                    placeholder="0x..."
+                                                    style={{ fontFamily: 'monospace', fontSize: '0.85em', minHeight: '60px' }}
+                                                />
+                                            </label>
+                                        )}
+                                    </>
+                                )}
                             </div>
                         </div>
                     ))}
