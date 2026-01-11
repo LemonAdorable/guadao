@@ -123,16 +123,33 @@ export default function ProposalsPage() {
 
       try {
         setGovStatus(statusLoading());
-        // Simple fetch for now
+        // Simple fetch for now --> UPDATED TO BATCH FETCH
         const currentBlock = await client.getBlockNumber();
         const startBlock = activeChainConfig?.startBlock ? BigInt(activeChainConfig.startBlock) : 0n;
+        const CHUNK_SIZE = 50000n; // Safety margin under 100k limit
 
-        const logs = await client.getLogs({
-          address: governorAddress,
-          event: GOVERNOR_ABI[0], // ProposalCreated
-          fromBlock: startBlock,
-          toBlock: currentBlock
-        });
+        const chunks = [];
+        for (let i = startBlock; i <= currentBlock; i += CHUNK_SIZE) {
+          const toBlock = i + CHUNK_SIZE - 1n < currentBlock ? i + CHUNK_SIZE - 1n : currentBlock;
+          chunks.push({ from: i, to: toBlock });
+        }
+
+        const logsChunks = await Promise.all(
+          chunks.map(async ({ from, to }) => {
+            try {
+              return await client.getLogs({
+                address: governorAddress,
+                event: GOVERNOR_ABI[0], // ProposalCreated
+                fromBlock: from,
+                toBlock: to
+              });
+            } catch (e) {
+              console.warn(`Failed to fetch gov logs for range ${from}-${to}`, e);
+              return [];
+            }
+          })
+        );
+        const logs = logsChunks.flat();
 
         const proposals = await Promise.all(logs.map(async (log) => {
           const pid = log.args.proposalId;
