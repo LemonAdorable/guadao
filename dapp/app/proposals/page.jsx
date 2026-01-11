@@ -163,12 +163,24 @@ export default function ProposalsPage() {
             });
           } catch (e) { console.warn('state fetch fail', e); }
 
-          // Parsing description for title if possible (OZ often puts title in md description)
-          // For now, raw description
+          // Parsing description for title
+          let title = '';
+          const desc = log.args.description || '';
+          if (desc) {
+            const lines = desc.split('\n');
+            const firstLine = lines.find(line => line.trim().length > 0 && !line.trim().startsWith('```'));
+            if (firstLine) {
+              title = firstLine.replace(/^#+\s*/, '').trim();
+              // Truncate if too long (e.g. > 80 chars)
+              if (title.length > 80) title = title.substring(0, 80) + '...';
+            }
+          }
+
           return {
             id: pid,
             proposer: log.args.proposer,
-            description: log.args.description,
+            description: desc,
+            title: title, // Parsed title
             voteStart: log.args.voteStart,
             voteEnd: log.args.voteEnd,
             state: state
@@ -640,10 +652,10 @@ export default function ProposalsPage() {
               >
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <strong>{t('proposal.detail.title')}{p.id?.toString() ?? '-'}</strong>
+                    <strong>{p.title ? p.title : `${t('proposal.detail.title')}${p.id?.toString() ?? '-'}`}</strong>
                     <span className="badge">{t(`governance.status.${p.state}`) || p.state}</span>
                   </div>
-                  <p style={{ margin: '4px 0' }}>{p.description}</p>
+                  {/* <p style={{ margin: '4px 0' }}>{p.description}</p> */}
                   <div className="muted">{t('proposals.card.start')}: {formatDateTime(p.voteStart)}</div>
                   <div className="muted">{t('proposals.card.end')}: {formatDateTime(p.voteEnd)}</div>
                 </div>

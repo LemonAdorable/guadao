@@ -428,6 +428,7 @@ const translations = {
     'governance.actions.target': '目标合约',
     'governance.actions.signature': '函数签名',
     'governance.actions.value': '转账金额',
+    'governance.proposer': '提案人',
     'governance.actions.calldata': '调用数据 (Calldata)',
     'governance.actions.useCalldata': '使用 Calldata',
     'governance.warning.noVotes': '您在快照区块时的权重为 0，本次无法投票。',
