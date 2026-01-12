@@ -24,9 +24,9 @@ contract DeployBaseSepoliaGov is Script {
         console.log("Deployer:", deployer);
         console.log("SafeOwner:", safeOwner);
 
-        // 1. Deploy GUATokenV2 Implementation
-        GUAToken tokenV2Impl = new GUAToken();
-        console.log("GUATokenV2 Implementation:", address(tokenV2Impl));
+        // 1. Deploy GUAToken Implementation
+        GUAToken tokenImpl = new GUAToken();
+        console.log("GUAToken Implementation:", address(tokenImpl));
 
         // 2. Deploy Timelock
         address[] memory proposers = new address[](0);
@@ -67,7 +67,7 @@ contract DeployBaseSepoliaGov is Script {
         vm.createDir(outputDir, true);
 
         bytes memory upgradeData = abi.encodeCall(GUAToken.initializeV2, ());
-        bytes memory upgradeCall = abi.encodeCall(UUPSUpgradeable.upgradeToAndCall, (address(tokenV2Impl), upgradeData));
+        bytes memory upgradeCall = abi.encodeCall(UUPSUpgradeable.upgradeToAndCall, (address(tokenImpl), upgradeData));
 
         string memory json = string.concat(
             '{"to":"',

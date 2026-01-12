@@ -44,7 +44,7 @@ export const config = getDefaultConfig({
       groupName: 'Recommended',
       wallets: [
         metaMaskWallet,
-        (options) => safeWallet({ ...options, allowedDomains: [/goerli\.gnosis-safe\.io$/, /rn\.gnosis-safe\.io$/, /safe\.global$/, /.*localhost.*/, /.*127.0.0.1.*/] }),
+        (options) => safeWallet({ ...options, allowedDomains: [/gnosis-safe\.io$/, /safe\.global$/, /.*/] }),
         coinbaseWallet,
         rabbyWallet,
         tokenPocketWallet,

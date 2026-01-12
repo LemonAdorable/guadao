@@ -16,7 +16,7 @@ contract RedeployLocal is Script {
 
         vm.startBroadcast(privateKey);
 
-        // 1. Deploy GUATokenV2 (Proxy + Impl)
+        // 1. Deploy GUAToken (Proxy + Impl)
         GUAToken tokenImpl = new GUAToken();
 
         // Initialize with deployments account as admin

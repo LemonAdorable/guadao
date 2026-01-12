@@ -633,11 +633,13 @@ export default function ProposalDetailPage() {
     runAction(
       'finalizeVoting',
       async () => {
+        // Safe apps can have issues with gas estimation, so we provide a safe buffer
         return writeContractAsync({
           address: escrowAddress,
           abi: ESCROW_ABI,
           functionName: 'finalizeVoting',
           args: [proposalIdValue],
+          gas: 200000n,
         });
       },
       {
