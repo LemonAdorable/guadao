@@ -460,6 +460,7 @@ const translations = {
     'proposal.results.title': '当前投票结果',
     'governance.quorum.reached': '已达到门槛',
     'governance.quorum.needed': '未达到门槛',
+    'governance.status.published': '已发布',
   },
   en: {
     'nav.home': 'Home',
@@ -882,6 +883,7 @@ const translations = {
     'proposal.results.title': 'Current Results',
     'governance.quorum.reached': 'Quorum Reached',
     'governance.quorum.needed': 'Quorum Needed',
+    'governance.status.published': 'Published',
     // Treasury
     'nav.treasury': 'Treasury',
     'treasury.eyebrow': 'Treasury & Assets',

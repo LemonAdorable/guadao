@@ -240,6 +240,59 @@ export default function GovernanceDetailPage() {
                     signatures: log?.args?.signatures || [],
                 });
 
+                // 3. Precise Time Fetching
+                if (log?.args?.voteStart) {
+                    const startBlk = log.args.voteStart;
+                    const endBlk = log.args.voteEnd;
+                    const creationBlk = log.blockNumber; // Capture creation block
+                    let sTime = null;
+                    let eTime = null;
+                    let cTime = null;
+
+                    try {
+                        // Fetch current block header for reference timestamp
+                        const currentHeader = await publicClient.getBlock({ blockNumber: currentBlock });
+                        const currentTs = Number(currentHeader.timestamp);
+
+                        // Fetch Creation Timestamp
+                        if (creationBlk) {
+                            const h = await publicClient.getBlock({ blockNumber: creationBlk });
+                            cTime = Number(h.timestamp);
+                        }
+
+                        // If start block is past, fetch its timestamp
+                        if (startBlk <= currentBlock) {
+                            const h = await publicClient.getBlock({ blockNumber: startBlk });
+                            sTime = Number(h.timestamp);
+                        } else {
+                            // Estimate future start
+                            const diff = Number(startBlk - currentBlock) * 2; // Base assume 2s
+                            sTime = currentTs + diff;
+                        }
+
+                        // If end block is past, fetch its timestamp
+                        if (endBlk && endBlk <= currentBlock) {
+                            const h = await publicClient.getBlock({ blockNumber: endBlk });
+                            eTime = Number(h.timestamp);
+                        } else if (endBlk) {
+                            // Estimate future end from current
+                            const diff = Number(endBlk - currentBlock) * 2;
+                            eTime = currentTs + diff;
+                        }
+
+                        // Update state with precise timestamps
+                        setProposalData(prev => ({
+                            ...prev,
+                            startTimestamp: sTime,
+                            endTimestamp: eTime,
+                            creationTimestamp: cTime
+                        }));
+
+                    } catch (err) {
+                        console.warn('Failed to fetch precise timestamps', err);
+                    }
+                }
+
                 setStatus(statusLoaded());
             } catch (e) {
                 console.error(e);
@@ -693,7 +746,10 @@ export default function GovernanceDetailPage() {
                         <p>
                             {t('voting.window.pending.block', { block: proposalData.voteStart.toString() })}
                             <span className="muted" style={{ marginLeft: '8px', fontSize: '0.9em' }}>
-                                (≈ {formatDateTime((Date.now() / 1000) + (Number(proposalData.voteStart) - Number(currentBlockNumber || 0)) * 2)})
+                                (≈ {proposalData.startTimestamp
+                                    ? new Date(proposalData.startTimestamp * 1000).toLocaleString()
+                                    : formatDateTime((Date.now() / 1000) + (Number(proposalData.voteStart) - Number(currentBlockNumber || 0)) * 2)
+                                })
                             </span>
                         </p>
                     </div>

@@ -47,15 +47,16 @@ export default function GovernanceTimeline({ currentStatus, proposal, currentBlo
     // Expired: Pending -> Active -> Succeeded -> Queued -> Expired
 
     const getTimelineSteps = () => {
-        if (currentStatus === 2) return [0, 1, 2]; // Canceled
-        if (currentStatus === 3) return [0, 1, 3]; // Defeated
-        if (currentStatus === 7) return [0, 1, 4, 5, 7]; // Executed
-        if (currentStatus === 6) return [0, 1, 4, 5, 6]; // Expired
-        if (currentStatus === 5) return [0, 1, 4, 5, 7]; // Queued (target Executed)
-        if (currentStatus === 4) return [0, 1, 4, 5, 7]; // Succeeded (target Executed)
+        const baseSteps = [-1]; // Always start with Published
+        if (currentStatus === 2) return [...baseSteps, 0, 1, 2]; // Canceled
+        if (currentStatus === 3) return [...baseSteps, 0, 1, 3]; // Defeated
+        if (currentStatus === 7) return [...baseSteps, 0, 1, 4, 5, 7]; // Executed
+        if (currentStatus === 6) return [...baseSteps, 0, 1, 4, 5, 6]; // Expired
+        if (currentStatus === 5) return [...baseSteps, 0, 1, 4, 5, 7]; // Queued (target Executed)
+        if (currentStatus === 4) return [...baseSteps, 0, 1, 4, 5, 7]; // Succeeded (target Executed)
 
         // Default Active/Pending path
-        return [0, 1, 4, 5, 7];
+        return [...baseSteps, 0, 1, 4, 5, 7];
     };
 
     const timelineSteps = getTimelineSteps();
@@ -64,8 +65,10 @@ export default function GovernanceTimeline({ currentStatus, proposal, currentBlo
     let activeStepIndex = timelineSteps.indexOf(currentStatus);
 
     if (activeStepIndex === -1) {
-        if (currentStatus === 1) activeStepIndex = 1;
-        if (currentStatus === 0) activeStepIndex = 0;
+        if (currentStatus === 1) activeStepIndex = 2; // Published(0), Pending(1), Active(2)
+        if (currentStatus === 0) activeStepIndex = 1; // Published(0), Pending(1)
+        // Note: timelineSteps includes -1 at index 0, 0 at index 1.
+        // If currentStatus is 0, indexOf is 1. Published (index 0) < 1 is Done. Correct.
     }
 
     const getStepClassName = (stepStatus, index) => {
@@ -77,6 +80,7 @@ export default function GovernanceTimeline({ currentStatus, proposal, currentBlo
     const getStepInfo = (stepStatus) => {
         // Map status to labels
         const labels = {
+            '-1': t('governance.status.published'),
             0: t('governance.status.0'), // Pending
             1: t('governance.status.1'), // Active
             2: t('governance.status.2'), // Canceled
@@ -88,8 +92,27 @@ export default function GovernanceTimeline({ currentStatus, proposal, currentBlo
         };
 
         let time = null;
-        if (stepStatus === 0) time = proposal?.voteStart ? formatBlockTime(proposal.voteStart, currentBlock) : null;
-        if (stepStatus === 1) time = proposal?.voteEnd ? `${t('voting.window.end')}: ${formatBlockTime(proposal.voteEnd, currentBlock)}` : null;
+        if (stepStatus === -1) {
+            if (proposal?.creationTimestamp) {
+                time = new Date(Number(proposal.creationTimestamp) * 1000).toLocaleString();
+            }
+        }
+        if (stepStatus === 0) {
+            // Created / Pending -> Now Voting Starts
+            if (proposal?.startTimestamp) {
+                time = new Date(Number(proposal.startTimestamp) * 1000).toLocaleString();
+            } else {
+                time = proposal?.voteStart ? formatBlockTime(proposal.voteStart, currentBlock) : null;
+            }
+        }
+        if (stepStatus === 1) {
+            // Active / Voting End
+            if (proposal?.endTimestamp) {
+                time = `${t('voting.window.end')}: ${new Date(Number(proposal.endTimestamp) * 1000).toLocaleString()}`;
+            } else {
+                time = proposal?.voteEnd ? `${t('voting.window.end')}: ${formatBlockTime(proposal.voteEnd, currentBlock)}` : null;
+            }
+        }
         if (stepStatus === 5 && proposal?.eta) time = `ETA: ${formatBlockTime(proposal.eta, null)}`; // ETA is usually timestamp in Timelock, but consistent check is safer
 
         return {
