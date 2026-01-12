@@ -4,7 +4,7 @@ pragma solidity ^0.8.33;
 import {Script, console} from "forge-std/Script.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {GUAGovernor} from "../contracts/GUAGovernor.sol";
-import {GUATokenV2} from "../contracts/GUATokenV2.sol";
+import {GUAToken} from "../contracts/GUAToken.sol";
 import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -25,7 +25,7 @@ contract DeployBaseSepoliaGov is Script {
         console.log("SafeOwner:", safeOwner);
 
         // 1. Deploy GUATokenV2 Implementation
-        GUATokenV2 tokenV2Impl = new GUATokenV2();
+        GUAToken tokenV2Impl = new GUAToken();
         console.log("GUATokenV2 Implementation:", address(tokenV2Impl));
 
         // 2. Deploy Timelock
@@ -66,7 +66,7 @@ contract DeployBaseSepoliaGov is Script {
         string memory outputDir = "safe-calldata";
         vm.createDir(outputDir, true);
 
-        bytes memory upgradeData = abi.encodeCall(GUATokenV2.initializeV2, ());
+        bytes memory upgradeData = abi.encodeCall(GUAToken.initializeV2, ());
         bytes memory upgradeCall = abi.encodeCall(UUPSUpgradeable.upgradeToAndCall, (address(tokenV2Impl), upgradeData));
 
         string memory json = string.concat(

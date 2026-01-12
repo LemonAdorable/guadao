@@ -3,14 +3,14 @@ pragma solidity ^0.8.33;
 
 import {Test, console} from "forge-std/Test.sol";
 import {GUAGovernor} from "../contracts/GUAGovernor.sol";
-import {GUATokenV2} from "../contracts/GUATokenV2.sol";
+import {GUAToken} from "../contracts/GUAToken.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
 import {IGovernor} from "@openzeppelin/contracts/governance/IGovernor.sol";
 
 contract GUAGovernorTest is Test {
-    GUATokenV2 public token;
+    GUAToken public token;
     TimelockController public timelock;
     GUAGovernor public governor;
 
@@ -28,10 +28,10 @@ contract GUAGovernorTest is Test {
         vm.startPrank(admin);
 
         // 1. Deploy Token
-        GUATokenV2 tokenImpl = new GUATokenV2();
-        bytes memory initData = abi.encodeCall(GUATokenV2.initialize, (admin));
+        GUAToken tokenImpl = new GUAToken();
+        bytes memory initData = abi.encodeCall(GUAToken.initialize, (admin));
         ERC1967Proxy tokenProxy = new ERC1967Proxy(address(tokenImpl), initData);
-        token = GUATokenV2(address(tokenProxy));
+        token = GUAToken(address(tokenProxy));
 
         // 2. Deploy Timelock
         address[] memory proposers = new address[](0);

@@ -12,7 +12,7 @@ contract UpgradeRepro is Script {
     function run() public {
         // Fork Base Sepolia
         vm.createSelectFork("https://sepolia.base.org");
-        
+
         console.log("--- Upgrade Reproduction ---");
         console.log("Proxy:", TOKEN_PROXY);
         console.log("New Impl:", NEW_IMPL);
@@ -20,21 +20,20 @@ contract UpgradeRepro is Script {
 
         // Check if Safe really has admin role on the LIVE Proxy
         // We use low-level call to ensure we use the Proxy's logic, not our local V2 interface assumptions
-        (bool success, bytes memory returnData) = TOKEN_PROXY.staticcall(
-            abi.encodeWithSignature("hasRole(bytes32,address)", 0x00, SAFE)
-        );
+        (bool success, bytes memory returnData) =
+            TOKEN_PROXY.staticcall(abi.encodeWithSignature("hasRole(bytes32,address)", 0x00, SAFE));
         require(success, "Check role failed");
         bool hasRole = abi.decode(returnData, (bool));
         console.log("Safe has DEFAULT_ADMIN_ROLE (Live Query):", hasRole);
 
         // Start Prank as Safe
         vm.startPrank(SAFE);
-        
+
         // Prepare data using local V2 artifact
         bytes memory initData = abi.encodeCall(GUAToken.initializeV2, ());
         console.log("InitData Selector:");
         console.logBytes(initData);
-        
+
         // Execute Upgrade
         console.log("Executing upgradeToAndCall...");
         try GUAToken(payable(TOKEN_PROXY)).upgradeToAndCall(NEW_IMPL, initData) {
@@ -45,7 +44,7 @@ contract UpgradeRepro is Script {
             console.log("FAILURE: Reverted with low-level data:");
             console.logBytes(lowLevelData);
         }
-        
+
         vm.stopPrank();
     }
 }

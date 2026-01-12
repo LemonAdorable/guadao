@@ -10,6 +10,7 @@ remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
     "@gnosis.pm/zodiac/=lib/zodiac/",
+    "@gnosis-guild/zodiac-core/=lib/zodiac/",
     "@gnosis.pm/zodiac-module-reality/=lib/zodiac-module-reality/contracts/",
     "@gnosis.pm/safe-contracts/=lib/safe-contracts/"
 ]

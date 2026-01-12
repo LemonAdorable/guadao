@@ -3,7 +3,7 @@ pragma solidity ^0.8.33;
 
 import {Script, console} from "forge-std/Script.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {GUATokenV2} from "../contracts/GUATokenV2.sol";
+import {GUAToken} from "../contracts/GUAToken.sol";
 import {GUAGovernor} from "../contracts/GUAGovernor.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {TopicBountyEscrow} from "../contracts/TopicBountyEscrow.sol";
@@ -17,12 +17,12 @@ contract RedeployLocal is Script {
         vm.startBroadcast(privateKey);
 
         // 1. Deploy GUATokenV2 (Proxy + Impl)
-        GUATokenV2 tokenImpl = new GUATokenV2();
+        GUAToken tokenImpl = new GUAToken();
 
         // Initialize with deployments account as admin
-        bytes memory tokenInit = abi.encodeCall(GUATokenV2.initialize, (deployer));
+        bytes memory tokenInit = abi.encodeCall(GUAToken.initialize, (deployer));
         ERC1967Proxy tokenProxy = new ERC1967Proxy(address(tokenImpl), tokenInit);
-        GUATokenV2 token = GUATokenV2(address(tokenProxy));
+        GUAToken token = GUAToken(address(tokenProxy));
 
         console.log("New GUAToken Address:", address(token));
 

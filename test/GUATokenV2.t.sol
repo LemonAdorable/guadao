@@ -4,7 +4,6 @@ pragma solidity ^0.8.33;
 import {Test, console} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {GUAToken} from "../contracts/GUAToken.sol";
-import {GUATokenV2} from "../contracts/GUATokenV2.sol";
 
 /**
  * @title GUATokenV2Test
@@ -12,7 +11,7 @@ import {GUATokenV2} from "../contracts/GUATokenV2.sol";
  */
 contract GUATokenV2Test is Test {
     GUAToken public tokenV1;
-    GUATokenV2 public tokenV2;
+    GUAToken public tokenV2;
     address public proxy;
 
     address public admin = address(1);
@@ -48,13 +47,13 @@ contract GUATokenV2Test is Test {
 
         // 执行升级
         vm.startPrank(admin);
-        GUATokenV2 v2Impl = new GUATokenV2();
-        bytes memory initData = abi.encodeCall(GUATokenV2.initializeV2, ());
+        GUAToken v2Impl = new GUAToken();
+        bytes memory initData = abi.encodeCall(GUAToken.initializeV2, ());
         tokenV1.upgradeToAndCall(address(v2Impl), initData);
         vm.stopPrank();
 
         // 使用 V2 接口
-        tokenV2 = GUATokenV2(proxy);
+        tokenV2 = GUAToken(proxy);
 
         // 验证余额不变
         assertEq(tokenV2.balanceOf(alice), aliceBalanceBefore, "Alice balance should be preserved");
@@ -66,12 +65,12 @@ contract GUATokenV2Test is Test {
 
         // 执行升级
         vm.startPrank(admin);
-        GUATokenV2 v2Impl = new GUATokenV2();
-        bytes memory initData = abi.encodeCall(GUATokenV2.initializeV2, ());
+        GUAToken v2Impl = new GUAToken();
+        bytes memory initData = abi.encodeCall(GUAToken.initializeV2, ());
         tokenV1.upgradeToAndCall(address(v2Impl), initData);
         vm.stopPrank();
 
-        tokenV2 = GUATokenV2(proxy);
+        tokenV2 = GUAToken(proxy);
         assertEq(tokenV2.totalSupply(), totalSupplyBefore, "Total supply should be preserved");
     }
 
@@ -153,8 +152,8 @@ contract GUATokenV2Test is Test {
     }
 
     function test_NonAdminCannotUpgrade() public {
-        GUATokenV2 v2Impl = new GUATokenV2();
-        bytes memory initData = abi.encodeCall(GUATokenV2.initializeV2, ());
+        GUAToken v2Impl = new GUAToken();
+        bytes memory initData = abi.encodeCall(GUAToken.initializeV2, ());
 
         // 非管理员尝试升级应该失败
         vm.prank(alice);
@@ -166,11 +165,11 @@ contract GUATokenV2Test is Test {
 
     function _upgradeToV2() internal {
         vm.startPrank(admin);
-        GUATokenV2 v2Impl = new GUATokenV2();
-        bytes memory initData = abi.encodeCall(GUATokenV2.initializeV2, ());
+        GUAToken v2Impl = new GUAToken();
+        bytes memory initData = abi.encodeCall(GUAToken.initializeV2, ());
         tokenV1.upgradeToAndCall(address(v2Impl), initData);
         vm.stopPrank();
 
-        tokenV2 = GUATokenV2(proxy);
+        tokenV2 = GUAToken(proxy);
     }
 }
