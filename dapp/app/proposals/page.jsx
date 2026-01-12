@@ -59,6 +59,24 @@ const formatDateTime = (timestamp) => {
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
 };
 
+const formatBlockOrTime = (val, currentBlock) => {
+  if (!val) return '-';
+  // Check if likely timestamp (> 1.5B)
+  if (Number(val) > 1500000000) {
+    const date = new Date(Number(val) * 1000);
+    return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
+  }
+  // Else block
+  let est = '';
+  if (currentBlock && Number(currentBlock) > 0) {
+    const diff = (Number(val) - Number(currentBlock)) * 2;
+    const ts = (Date.now() / 1000) + diff;
+    const d = new Date(ts * 1000);
+    est = ` (≈ ${d.toLocaleString()})`;
+  }
+  return `Block #${val.toString()}${est}`;
+};
+
 export default function ProposalsPage() {
   const { t, lang } = useI18n();
   const chainOptions = useMemo(getChainOptions, []);
@@ -80,12 +98,14 @@ export default function ProposalsPage() {
   const [allLogs, setAllLogs] = useState([]);
   const [loadedCount, setLoadedCount] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [currentBlockNumber, setCurrentBlockNumber] = useState(0n);
   const BATCH_SIZE = 12;
 
   const { isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChainAsync, isPending: isSwitching } = useSwitchChain();
   const wagmiPublicClient = usePublicClient();
+
 
   const chainMismatch = isConnected && targetChainId && chainId !== targetChainId;
 
@@ -125,6 +145,7 @@ export default function ProposalsPage() {
         setGovStatus(statusLoading());
         // Simple fetch for now --> UPDATED TO BATCH FETCH
         const currentBlock = await client.getBlockNumber();
+        setCurrentBlockNumber(currentBlock);
         const startBlock = activeChainConfig?.startBlock ? BigInt(activeChainConfig.startBlock) : 0n;
         const CHUNK_SIZE = 50000n; // Safety margin under 100k limit
 
@@ -656,8 +677,8 @@ export default function ProposalsPage() {
                     <span className="badge">{t(`governance.status.${p.state}`) || p.state}</span>
                   </div>
                   {/* <p style={{ margin: '4px 0' }}>{p.description}</p> */}
-                  <div className="muted">{t('proposals.card.start')}: {formatDateTime(p.voteStart)}</div>
-                  <div className="muted">{t('proposals.card.end')}: {formatDateTime(p.voteEnd)}</div>
+                  <div className="muted">{t('proposals.card.start')}: {formatBlockOrTime(p.voteStart, currentBlockNumber)}</div>
+                  <div className="muted">{t('proposals.card.end')}: {formatBlockOrTime(p.voteEnd, currentBlockNumber)}</div>
                 </div>
               </Link>
             ))}

@@ -13,6 +13,7 @@ import MarkdownRenderer from '../../components/MarkdownRenderer';
 import ScrollProgress from '../../components/ScrollProgress';
 import GovernanceTimeline from '../../../components/GovernanceTimeline';
 import CopyButton from '../../components/CopyButton';
+import VoteResultsCard from '../../../components/VoteResultsCard';
 
 const GOVERNOR_ABI = parseAbi([
     'event ProposalCreated(uint256 proposalId, address proposer, address[] targets, uint256[] values, string[] signatures, bytes[] calldatas, uint256 voteStart, uint256 voteEnd, string description)',
@@ -23,7 +24,8 @@ const GOVERNOR_ABI = parseAbi([
     'function castVote(uint256 proposalId, uint8 support)',
     'function hasVoted(uint256 proposalId, address account) view returns (bool)',
     'function queue(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash)',
-    'function execute(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash)'
+    'function execute(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash)',
+    'function quorum(uint256 blockNumber) view returns (uint256)'
 ]);
 
 const TOKEN_ABI = parseAbi([
@@ -58,6 +60,7 @@ export default function GovernanceDetailPage() {
     const [userDelegatee, setUserDelegatee] = useState(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [delegateeInput, setDelegateeInput] = useState(''); // For input field
+    const [currentBlockNumber, setCurrentBlockNumber] = useState(0n);
 
     const { address, isConnected } = useAccount();
     const chainId = useChainId();
@@ -125,15 +128,25 @@ export default function GovernanceDetailPage() {
             try {
                 setStatus(statusLoading());
 
-                // 1. Fetch State & Votes using Promise.all
-                const [state, votes, hasVotedUser, snapshot, deadline, quorumVal] = await Promise.all([
+                // 1. Fetch State & Votes & Snapshot
+                const [state, votes, hasVotedUser, snapshot, deadline] = await Promise.all([
                     publicClient.readContract({ address: governorAddress, abi: GOVERNOR_ABI, functionName: 'state', args: [proposalId] }),
                     publicClient.readContract({ address: governorAddress, abi: GOVERNOR_ABI, functionName: 'proposalVotes', args: [proposalId] }),
                     publicClient.readContract({ address: governorAddress, abi: GOVERNOR_ABI, functionName: 'hasVoted', args: [proposalId, address || '0x0000000000000000000000000000000000000000'] }),
                     publicClient.readContract({ address: governorAddress, abi: GOVERNOR_ABI, functionName: 'proposalSnapshot', args: [proposalId] }),
                     publicClient.readContract({ address: governorAddress, abi: GOVERNOR_ABI, functionName: 'proposalDeadline', args: [proposalId] }),
-                    publicClient.readContract({ address: governorAddress, abi: GOVERNOR_ABI, functionName: 'quorum', args: [proposalId] }).catch(() => 0n),
                 ]);
+
+                // 1b. Fetch Quorum using snapshot
+                const quorumVal = await publicClient.readContract({
+                    address: governorAddress,
+                    abi: GOVERNOR_ABI,
+                    functionName: 'quorum',
+                    args: [snapshot]
+                }).catch(e => {
+                    console.warn('Failed to fetch quorum', e);
+                    return 0n;
+                });
 
                 // Fetch User's Voting Power at Snapshot & Current Delegatee
                 let myVotes = 0n;
@@ -165,6 +178,7 @@ export default function GovernanceDetailPage() {
                 // 2. Fetch Description from Event
                 const startBlock = activeChainConfig?.startBlock ? BigInt(activeChainConfig.startBlock) : 0n;
                 const currentBlock = await publicClient.getBlockNumber();
+                setCurrentBlockNumber(currentBlock);
 
                 const CHUNK_SIZE = 50000n;
                 const chunks = [];
@@ -404,209 +418,284 @@ export default function GovernanceDetailPage() {
                                 </div>
                             </div>
 
-                            {/* Votes Block */}
-                            <div style={{ gridColumn: 'span 2', background: 'var(--bg-subtle)', padding: '10px 16px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <div className="muted" style={{ fontSize: '0.9em' }}>{t('governance.votes.for')}</div>
-                                    <div style={{ color: 'var(--success)', fontWeight: 'bold', fontSize: '1.2em' }}>
-                                        {formatUnits(proposalData.forVotes, 18)}
-                                    </div>
-                                </div>
-                                <div style={{ height: '30px', width: '1px', background: 'var(--border)' }}></div>
-                                <div>
-                                    <div className="muted" style={{ fontSize: '0.9em' }}>{t('governance.votes.against')}</div>
-                                    <div style={{ color: 'var(--danger)', fontWeight: 'bold', fontSize: '1.2em' }}>
-                                        {formatUnits(proposalData.againstVotes, 18)}
-                                    </div>
-                                </div>
-                                <div style={{ height: '30px', width: '1px', background: 'var(--border)' }}></div>
-                                <div>
-                                    <div className="muted" style={{ fontSize: '0.9em' }}>{t('governance.myVotes')}</div>
-                                    <div style={{ fontWeight: 'bold', fontSize: '1.2em' }}>
-                                        {formatUnits(proposalData.myVotes || 0n, 18)}
-                                    </div>
-                                </div>
-                            </div>
                         </div>
+
                     </>
                 )}
             </section>
 
+            {/* Vote Results Card */}
+            {
+                proposalData && (
+                    <section className="panel">
+                        <VoteResultsCard
+                            proposalData={proposalData}
+                            quorum={proposalData.quorum}
+                            symbol="GUA"
+                        />
+                    </section>
+                )
+            }
+
             {/* Delegate Warning Section (New Placement) */}
-            {isConnected && userBalance > 0n && userDelegatee === '0x0000000000000000000000000000000000000000' && (
-                <div className="notice warning" style={{ marginBottom: '1.5rem', animation: 'fadeIn 0.3s' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <h3 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {t('governance.warning.delegate.title')}
-                        </h3>
+            {
+                isConnected && userBalance > 0n && userDelegatee === '0x0000000000000000000000000000000000000000' && (
+                    <div className="notice warning" style={{ marginBottom: '1.5rem', animation: 'fadeIn 0.3s' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <h3 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {t('governance.warning.delegate.title')}
+                            </h3>
 
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', fontSize: '0.9em', color: 'var(--muted)', marginTop: '4px' }}>
-                            <div>
-                                <span>{t('governance.delegate.yourVotes')} </span>
-                                <strong style={{ color: 'var(--error)' }}>{formatGUA(userCurrentVotes)}</strong>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', fontSize: '0.9em', color: 'var(--muted)', marginTop: '4px' }}>
+                                <div>
+                                    <span>{t('governance.delegate.yourVotes')} </span>
+                                    <strong style={{ color: 'var(--error)' }}>{formatGUA(userCurrentVotes)}</strong>
+                                </div>
+                                <div>
+                                    <span>{t('governance.delegate.yourBalance')} </span>
+                                    <strong style={{ color: 'var(--success)' }}>
+                                        {formatGUA(userBalance)}
+                                    </strong>
+                                </div>
                             </div>
-                            <div>
-                                <span>{t('governance.delegate.yourBalance')} </span>
-                                <strong style={{ color: 'var(--success)' }}>
-                                    {formatGUA(userBalance)}
-                                </strong>
-                            </div>
-                        </div>
 
-                        <p style={{ margin: '0', fontSize: '0.95em', lineHeight: '1.5' }}>
-                            {t('governance.warning.delegateCheck')}
-                        </p>
-
-                        <div style={{ marginTop: '4px', padding: '16px', background: 'var(--bg-sub)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                            <p style={{ marginBottom: '8px', fontSize: '0.9em', fontWeight: 'bold' }}>{t('governance.delegate.to')}</p>
-                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <input
-                                    value={delegateeInput}
-                                    onChange={(e) => setDelegateeInput(e.target.value)}
-                                    placeholder={t('governance.delegate.placeholder')}
-                                    style={{
-                                        flex: 1,
-                                        minWidth: '200px',
-                                        padding: '10px 12px',
-                                        fontSize: '0.95em',
-                                        background: 'var(--input-bg)',
-                                        border: '1px solid var(--border)',
-                                        borderRadius: '6px',
-                                        color: 'var(--fg)'
-                                    }}
-                                />
-                                <button
-                                    className="btn primary sm"
-                                    onClick={handleDelegate}
-                                    disabled={!!action || isWriting}
-                                    style={{ whiteSpace: 'nowrap', padding: '10px 20px' }}
-                                >
-                                    {t('governance.delegate.action')}
-                                </button>
-                            </div>
-                            <p style={{ fontSize: '0.85em', color: 'var(--muted)', marginTop: '8px', fontStyle: 'italic' }}>
-                                {delegateeInput && isAddress(delegateeInput)
-                                    ? t('governance.delegate.status.to', { address: `${delegateeInput.slice(0, 6)}...${delegateeInput.slice(-4)}` })
-                                    : t('governance.delegate.status.self')}
+                            <p style={{ margin: '0', fontSize: '0.95em', lineHeight: '1.5' }}>
+                                {t('governance.warning.delegateCheck')}
                             </p>
+
+                            <div style={{ marginTop: '4px', padding: '16px', background: 'var(--bg-sub)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                <p style={{ marginBottom: '8px', fontSize: '0.9em', fontWeight: 'bold' }}>{t('governance.delegate.to')}</p>
+                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <input
+                                        value={delegateeInput}
+                                        onChange={(e) => setDelegateeInput(e.target.value)}
+                                        placeholder={t('governance.delegate.placeholder')}
+                                        style={{
+                                            flex: 1,
+                                            minWidth: '200px',
+                                            padding: '10px 12px',
+                                            fontSize: '0.95em',
+                                            background: 'var(--input-bg)',
+                                            border: '1px solid var(--border)',
+                                            borderRadius: '6px',
+                                            color: 'var(--fg)'
+                                        }}
+                                    />
+                                    <button
+                                        className="btn primary sm"
+                                        onClick={handleDelegate}
+                                        disabled={!!action || isWriting}
+                                        style={{ whiteSpace: 'nowrap', padding: '10px 20px' }}
+                                    >
+                                        {t('governance.delegate.action')}
+                                    </button>
+                                </div>
+                                <p style={{ fontSize: '0.85em', color: 'var(--muted)', marginTop: '8px', fontStyle: 'italic' }}>
+                                    {delegateeInput && isAddress(delegateeInput)
+                                        ? t('governance.delegate.status.to', { address: `${delegateeInput.slice(0, 6)}...${delegateeInput.slice(-4)}` })
+                                        : t('governance.delegate.status.self')}
+                                </p>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <section className="panel">
                 <h2>{t('escrow.steps.title')}</h2>
-                <GovernanceTimeline currentStatus={proposalData?.state} proposal={proposalData} />
+                <GovernanceTimeline currentStatus={proposalData?.state} proposal={proposalData} currentBlock={currentBlockNumber} />
             </section>
 
-            {proposalData?.description && (
-                <section className="panel">
-                    <h2>{t('proposals.create.description')}</h2>
-                    <MarkdownRenderer showToc={true}>{proposalData.description}</MarkdownRenderer>
-                </section>
-            )}
+            {
+                proposalData?.description && (
+                    <section className="panel">
+                        <h2>{t('proposals.create.description')}</h2>
+                        <MarkdownRenderer showToc={true}>{proposalData.description}</MarkdownRenderer>
+                    </section>
+                )
+            }
 
             {/* Actions Section */}
-            {proposalData?.targets?.length > 0 && (
-                <section className="panel">
-                    <h2>{t('governance.actions.title')}</h2>
-                    <div className="table-responsive">
-                        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                                    <th style={{ padding: '0.75rem' }}>#</th>
-                                    <th style={{ padding: '0.75rem' }}>{t('governance.actions.target')}</th>
-                                    <th style={{ padding: '0.75rem' }}>Action</th>
-                                    <th style={{ padding: '0.75rem' }}>Details</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {proposalData.targets.map((target, idx) => {
-                                    const signature = proposalData.signatures[idx];
-                                    const calldata = proposalData.calldatas[idx];
-                                    const value = proposalData.values[idx];
+            {
+                proposalData?.targets?.length > 0 && (
+                    <section className="panel">
+                        <h2>{t('governance.actions.title')}</h2>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {proposalData.targets.map((target, idx) => {
+                                const calldata = proposalData.calldatas[idx];
+                                const value = proposalData.values[idx];
+                                const signaturePayload = proposalData.signatures?.[idx]; // Use optional chaining just in case
 
-                                    // Decoding
-                                    let type = 'Custom Call';
-                                    let details = '';
-                                    let raw = true;
+                                // Decoding Logic
+                                let functionName = 'Unknown Function';
+                                let functionSignature = signaturePayload || '0x';
+                                let decodedArgs = [];
+                                let isDecoded = false;
 
-                                    // 1. Native
-                                    if (value > 0n && (!calldata || calldata === '0x')) {
-                                        type = 'Native Transfer';
-                                        details = `${formatUnits(value, 18)} ETH`;
-                                        raw = false;
-                                    }
-                                    // 2. Decode Standard
-                                    else if (calldata && calldata !== '0x') {
-                                        try {
-                                            const decoded = decodeFunctionData({
-                                                abi: parseAbi([
-                                                    'function transfer(address to, uint256 amount)',
-                                                    'function approve(address spender, uint256 amount)',
-                                                    'function transferFrom(address from, address to, uint256 amount)',
-                                                    'function delegate(address delegatee)',
-                                                    'function mint(address to, uint256 amount)'
-                                                ]),
-                                                data: calldata
-                                            });
-                                            type = decoded.functionName;
-                                            details = decoded.args.map(arg => {
-                                                if (typeof arg === 'bigint') return formatUnits(arg, 18);
-                                                return arg.toString();
-                                            }).join(', ');
+                                // 1. Native Transfer (Empty Calldata + Value)
+                                if (value > 0n && (!calldata || calldata === '0x')) {
+                                    functionName = 'Native Transfer';
+                                    functionSignature = 'transfer(address,uint256)'; // Pseudo-signature
+                                    decodedArgs = [
+                                        { name: 'to', type: 'address', value: target },
+                                        { name: 'amount', type: 'uint256', value: formatUnits(value, 18) + ' ETH' }
+                                    ];
+                                    isDecoded = true;
+                                }
+                                // 2. Decode known functions
+                                else if (calldata && calldata !== '0x') {
+                                    try {
+                                        // Try to decode with a common ABI set
+                                        const encoded = decodeFunctionData({
+                                            abi: parseAbi([
+                                                'function transfer(address to, uint256 amount)',
+                                                'function approve(address spender, uint256 amount)',
+                                                'function transferFrom(address from, address to, uint256 amount)',
+                                                'function delegate(address delegatee)',
+                                                'function mint(address to, uint256 amount)',
+                                                'function burn(uint256 amount)',
+                                                'function updateDelay(uint256 newDelay)',
+                                                'function schedule(address target, uint256 value, bytes calldata data, bytes32 predecessor, bytes32 salt, uint256 delay)',
+                                                'function cancel(bytes32 id)',
+                                                'function execute(address target, uint256 value, bytes calldata data, bytes32 predecessor, bytes32 salt)',
+                                                'function setVotingDelay(uint256 newVotingDelay)',
+                                                'function setVotingPeriod(uint256 newVotingPeriod)',
+                                                'function setProposalThreshold(uint256 newProposalThreshold)',
+                                                'function updateQuorumNumerator(uint256 newQuorumNumerator)',
+                                                'function updateTimelock(address newTimelock)'
+                                            ]),
+                                            data: calldata
+                                        });
 
-                                            if (type === 'transfer' || type === 'approve') {
-                                                const addr = decoded.args[0].toString();
-                                                const amt = decoded.args[1];
-                                                details = `To: ${addr.slice(0, 6)}...${addr.slice(-4)} | Amount: ${formatUnits(amt, 18)}`;
+                                        functionName = encoded.functionName;
+                                        // Reconstruct signature string e.g., "mint(address,uint256)"
+                                        // We can map common names to sigs or reconstruct approx from args
+                                        // For now, let's just use the name and arg types from definition if possible, 
+                                        // but Viem's result gives args array.
+                                        // Let's rely on the hardcoded ABI above to map back if we wanted perfection, 
+                                        // but displaying "mint" as name is good.
+                                        // To match user request "mint(address,uint256)", we can construct it:
+                                        const argTypes = encoded.args.map(a => typeof a === 'string' && a.startsWith('0x') ? 'address' : 'uint256'); // Simplified inference
+                                        // Better: use the definition from the ABI we just parsed? 
+                                        // Viem decode doesn't return the full Item by default easily without finding it ourselves.
+                                        // Let's just assume standard types for these common functions or format cleanly.
+
+                                        // MAPPING for perfect display of the "Signature" field requested
+                                        const sigMap = {
+                                            'mint': 'mint(address,uint256)',
+                                            'transfer': 'transfer(address,uint256)',
+                                            'approve': 'approve(address,uint256)',
+                                            'delegate': 'delegate(address)',
+                                            'updateQuorumNumerator': 'updateQuorumNumerator(uint256)',
+                                            'setVotingDelay': 'setVotingDelay(uint256)',
+                                            'setVotingPeriod': 'setVotingPeriod(uint256)',
+                                            'setProposalThreshold': 'setProposalThreshold(uint256)',
+                                        };
+                                        functionSignature = sigMap[functionName] || `${functionName}(...)`;
+
+                                        decodedArgs = encoded.args.map((arg, i) => {
+                                            let type = 'unknown';
+                                            let valString = String(arg);
+                                            // Simple heuristic for demo
+                                            if (typeof arg === 'string' && arg.startsWith('0x')) type = 'address';
+                                            if (typeof arg === 'bigint') {
+                                                type = 'uint256';
+                                                valString = arg.toString();
                                             }
-                                            raw = false;
-                                        } catch (e) { /* ignore */ }
-                                    }
+                                            return { name: `param_${i}`, type, value: valString };
+                                        });
+                                        // Refine names based on function
+                                        if (functionName === 'mint') { decodedArgs[0].name = 'to'; decodedArgs[1].name = 'amount'; }
+                                        if (functionName === 'transfer') { decodedArgs[0].name = 'to'; decodedArgs[1].name = 'amount'; }
 
-                                    return (
-                                        <tr key={idx} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                            <td style={{ padding: '0.75rem' }}>{idx + 1}</td>
-                                            <td style={{ padding: '0.75rem' }}>
-                                                {target ? <ExplorerLink chainId={chainId} value={target} type="address" short /> : <span className="muted">Invalid Target</span>}
-                                            </td>
-                                            <td style={{ padding: '0.75rem', fontWeight: 'bold' }}>
-                                                {signature || type}
-                                            </td>
-                                            <td style={{ padding: '0.75rem' }}>
-                                                {raw ? (
-                                                    <div className="code-block-sm" title={calldata} style={{
-                                                        maxWidth: '300px',
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis',
-                                                        whiteSpace: 'nowrap',
-                                                        fontFamily: 'monospace',
-                                                        background: 'var(--bg-subtle)',
-                                                        padding: '4px',
-                                                        borderRadius: '4px',
-                                                        cursor: 'help'
-                                                    }}>
-                                                        {calldata || '0x'}
-                                                    </div>
-                                                ) : (
-                                                    <span>{details}</span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            )}
+                                        isDecoded = true;
+                                    } catch (e) {
+                                        // Decoding failed, generic fallback
+                                        functionSignature = signaturePayload || calldata.slice(0, 10);
+                                    }
+                                }
+
+                                return (
+                                    <div key={idx} style={{
+                                        background: 'var(--bg-subtle)',
+                                        borderRadius: '8px',
+                                        border: '1px solid var(--border)',
+                                        overflow: 'hidden'
+                                    }}>
+                                        <div style={{
+                                            padding: '12px 16px',
+                                            borderBottom: '1px solid var(--border-subtle)',
+                                            background: 'rgba(0,0,0,0.02)',
+                                            fontSize: '0.95em',
+                                            fontWeight: 'bold',
+                                            color: 'var(--fg)',
+                                            display: 'flex', justifyContent: 'space-between'
+                                        }}>
+                                            <span>Function {idx + 1}</span>
+                                            <span className="badge sm">{formatUnits(value, 18)} ETH Value</span>
+                                        </div>
+
+                                        <div style={{ padding: '16px', fontSize: '0.9em', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                            {/* Signature */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '12px' }}>
+                                                <span style={{ color: 'var(--muted)' }}>Signature:</span>
+                                                <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{functionSignature}</span>
+                                            </div>
+
+                                            {/* Calldata */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '12px' }}>
+                                                <span style={{ color: 'var(--muted)' }}>Calldata:</span>
+                                                <div>
+                                                    {isDecoded ? (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                            {decodedArgs.map((arg, argIdx) => (
+                                                                <div key={argIdx} style={{ display: 'flex', gap: '8px', fontFamily: 'monospace' }}>
+                                                                    <span style={{ color: 'var(--primary)', minWidth: '60px' }}>{arg.name}:</span>
+                                                                    <span style={{ wordBreak: 'break-all' }}>{arg.value}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div style={{ wordBreak: 'break-all', fontFamily: 'monospace', color: 'var(--muted)' }}>
+                                                            {calldata}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Target */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '12px' }}>
+                                                <span style={{ color: 'var(--muted)' }}>Target:</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <span style={{ fontFamily: 'monospace' }}>{target}</span>
+                                                    <ExplorerLink chainId={chainId} value={target} type="address" iconOnly />
+                                                </div>
+                                            </div>
+
+                                            {/* Value */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '12px' }}>
+                                                <span style={{ color: 'var(--muted)' }}>Value:</span>
+                                                <span>{value.toString()}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                )
+            }
 
             <section className="panel">
                 <h2>{t('governance.voting.title')}</h2>
                 {proposalData?.state === 0 && (
                     <div className="status-message">
-                        <p>{t('voting.window.pending', { time: formatDateTime(proposalData.voteStart) })}</p>
+                        <p>
+                            {t('voting.window.pending.block', { block: proposalData.voteStart.toString() })}
+                            <span className="muted" style={{ marginLeft: '8px', fontSize: '0.9em' }}>
+                                (≈ {formatDateTime((Date.now() / 1000) + (Number(proposalData.voteStart) - Number(currentBlockNumber || 0)) * 2)})
+                            </span>
+                        </p>
                     </div>
                 )}
 
@@ -664,6 +753,6 @@ export default function GovernanceDetailPage() {
                 {proposalData?.state === 6 && <p className="muted">Proposal Expired</p>}
                 {proposalData?.state === 7 && <p className="muted">Proposal Executed</p>}
             </section>
-        </main>
+        </main >
     );
 }

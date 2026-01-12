@@ -13,13 +13,31 @@ const STATUS_CONFIG = [
     { status: 7, key: 'Executed' },
 ];
 
-const formatDateTime = (timestamp) => {
-    if (!timestamp) return '-';
-    const date = new Date(Number(timestamp) * 1000);
-    return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
+
+const formatBlockTime = (blockNumber, currentBlock, t) => {
+    if (!blockNumber) return '-';
+    // If it's a small number/block number, show Block #
+    // Simple heuristic: Unix timestamp 2020+ is > 1.5 billion. Block numbers are usually < 100M or similar range on L2s (Base is different but distinct).
+    // Base block number is ~18M+. Timestamp is 1.7B+.
+    // A cutoff of 1,000,000,000 is safe.
+    if (Number(blockNumber) > 1000000000) {
+        // It's a timestamp
+        const date = new Date(Number(blockNumber) * 1000);
+        return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
+    }
+
+    // It's a block
+    let est = '';
+    if (currentBlock) {
+        const secondsDiff = (Number(blockNumber) - Number(currentBlock)) * 2; // Assume 2s per block
+        const timestamp = (Date.now() / 1000) + secondsDiff;
+        const date = new Date(timestamp * 1000);
+        est = `(≈ ${date.toLocaleString()})`;
+    }
+    return `Block #${blockNumber} ${est}`;
 };
 
-export default function GovernanceTimeline({ currentStatus, proposal }) {
+export default function GovernanceTimeline({ currentStatus, proposal, currentBlock }) {
     const { t } = useI18n();
 
     // Lifecycle paths:
@@ -41,18 +59,11 @@ export default function GovernanceTimeline({ currentStatus, proposal }) {
     };
 
     const timelineSteps = getTimelineSteps();
-    // Determine current index based on status
-    // Note: status values (0-7) don't map linear to index for all cases, but map to step values
 
-    // Find where the CURRENT status is in the active path
+    // Determine current index based on status
     let activeStepIndex = timelineSteps.indexOf(currentStatus);
 
-    // Fallback: If current status is not in the path (e.g. we are at Active (1) but path shows Succeeded (4)), 
-    // we need to set active index to where we are.
     if (activeStepIndex === -1) {
-        // If we are Active (1), and path is [0, 1, 4, 5, 7], index is 1.
-        // Logic: Iterate steps, if step <= currentStatus (conceptually), but that's hard for non-linear.
-        // Simplified:
         if (currentStatus === 1) activeStepIndex = 1;
         if (currentStatus === 0) activeStepIndex = 0;
     }
@@ -77,9 +88,9 @@ export default function GovernanceTimeline({ currentStatus, proposal }) {
         };
 
         let time = null;
-        if (stepStatus === 0) time = proposal?.voteStart ? formatDateTime(proposal.voteStart) : null;
-        if (stepStatus === 1) time = proposal?.voteEnd ? `${t('voting.window.end')}: ${formatDateTime(proposal.voteEnd)}` : null;
-        if (stepStatus === 5 && proposal?.eta) time = `ETA: ${formatDateTime(proposal.eta)}`;
+        if (stepStatus === 0) time = proposal?.voteStart ? formatBlockTime(proposal.voteStart, currentBlock) : null;
+        if (stepStatus === 1) time = proposal?.voteEnd ? `${t('voting.window.end')}: ${formatBlockTime(proposal.voteEnd, currentBlock)}` : null;
+        if (stepStatus === 5 && proposal?.eta) time = `ETA: ${formatBlockTime(proposal.eta, null)}`; // ETA is usually timestamp in Timelock, but consistent check is safer
 
         return {
             label: labels[stepStatus] || `Status ${stepStatus}`,
