@@ -525,6 +525,10 @@ export default function ProposalDetailPage() {
         ]);
 
       } catch (error) {
+        console.error("RunAction Error:", error);
+        if (error?.message) console.error("Error Message:", error.message);
+        if (error?.data) console.error("Error Data:", error.data);
+        if (error?.cause) console.error("Error Cause:", error.cause);
         const message = error?.shortMessage || error?.message || 'Action failed';
         setStatus(statusError('status.tx.failed', { reason: message }));
       } finally {
@@ -634,6 +638,8 @@ export default function ProposalDetailPage() {
       'finalizeVoting',
       async () => {
         // Safe apps can have issues with gas estimation, so we provide a safe buffer
+        console.log('Finalizing voting for proposal:', proposalIdValue);
+        console.log('Target args:', [proposalIdValue]);
         return writeContractAsync({
           address: escrowAddress,
           abi: ESCROW_ABI,
