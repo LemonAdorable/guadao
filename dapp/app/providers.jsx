@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { WagmiProvider, usePrivyWagmi } from '@privy-io/wagmi';
-import { useAccount } from 'wagmi';
+import { usePrivyWagmi } from '@privy-io/wagmi';
+import { WagmiProvider, useAccount } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PrivyProvider, usePrivy, useWallets } from '@privy-io/react-auth';
 import '@rainbow-me/rainbowkit/styles.css';
