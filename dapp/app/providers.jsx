@@ -109,16 +109,14 @@ export default function Providers({ children }) {
       <QueryClientProvider client={queryClient}>
         {mounted && (
           <WagmiProvider config={config}>
-            <RainbowKitProvider
-              chains={config.chains}
-              theme={{
-                light: lightTheme(),
-                dark: darkTheme(),
-              }}
-            >
-              <WalletSync />
-              {children}
-            </RainbowKitProvider>
+            <ThemeProvider>
+              <LanguageProvider>
+                <RainbowKitWrapper>
+                  <WalletSync />
+                  <AdminProvider>{children}</AdminProvider>
+                </RainbowKitWrapper>
+              </LanguageProvider>
+            </ThemeProvider>
           </WagmiProvider>
         )}
       </QueryClientProvider>
