@@ -14,6 +14,42 @@ import { LanguageProvider, useI18n } from './components/LanguageProvider';
 import { AdminProvider } from './components/AdminProvider';
 import { ThemeProvider, useTheme } from './components/ThemeProvider';
 import { useMemo } from 'react';
+import { injected } from 'wagmi/connectors';
+import { useConnect, useDisconnect, useAccount } from 'wagmi';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+
+/**
+ * Syncs Privy wallet with Wagmi
+ */
+function WalletSync() {
+  const { isConnected } = useAccount();
+  const { authenticated, ready } = usePrivy();
+  const { wallets } = useWallets();
+  const { connect, status } = useConnect();
+  const { disconnect } = useDisconnect();
+
+  useEffect(() => {
+    const syncWallet = async () => {
+      if (ready && authenticated && !isConnected && wallets.length > 0 && status !== 'pending') {
+        const privyWallet = wallets.find((w) => w.walletClientType === 'privy') || wallets[0];
+        console.log('WalletSync: Syncing Privy wallet to Wagmi...', privyWallet.address);
+        try {
+          const provider = await privyWallet.getEthereumProvider();
+          await connect({ connector: injected({ target: { provider, id: 'privy', name: 'Privy Wallet' } }) });
+        } catch (e) {
+          console.error('WalletSync: Sync failed', e);
+        }
+      }
+      if (ready && !authenticated && isConnected) {
+        console.log('WalletSync: Privy logged out, disconnecting Wagmi...');
+        disconnect();
+      }
+    };
+    syncWallet();
+  }, [ready, authenticated, isConnected, wallets, connect, status, disconnect]);
+
+  return null;
+}
 
 
 
@@ -67,6 +103,7 @@ function WagmiWrapper({ children, mounted }) {
     <WagmiProvider config={config}>
       <ThemeProvider>
         <RainbowKitWrapper>
+          <WalletSync />
           <AdminProvider>{children}</AdminProvider>
         </RainbowKitWrapper>
       </ThemeProvider>
