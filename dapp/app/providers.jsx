@@ -9,10 +9,11 @@ import '@rainbow-me/rainbowkit/styles.css';
 import { RainbowKitProvider, lightTheme, darkTheme } from '@rainbow-me/rainbowkit';
 import { base, baseSepolia } from 'viem/chains';
 
-import { config } from '../lib/wagmi';
+import { getConfig } from '../lib/wagmi';
 import { LanguageProvider, useI18n } from './components/LanguageProvider';
 import { AdminProvider } from './components/AdminProvider';
 import { ThemeProvider, useTheme } from './components/ThemeProvider';
+import { useMemo } from 'react';
 
 
 
@@ -58,6 +59,21 @@ function RainbowKitWrapper({ children }) {
   );
 }
 
+function WagmiWrapper({ children, mounted }) {
+  const { lang } = useI18n();
+  const config = useMemo(() => getConfig(lang), [lang]);
+
+  return (
+    <WagmiProvider config={config}>
+      <ThemeProvider>
+        <RainbowKitWrapper>
+          <AdminProvider>{children}</AdminProvider>
+        </RainbowKitWrapper>
+      </ThemeProvider>
+    </WagmiProvider>
+  );
+}
+
 export default function Providers({ children }) {
   const [queryClient] = useState(() => new QueryClient());
 
@@ -86,15 +102,11 @@ export default function Providers({ children }) {
     >
       <QueryClientProvider client={queryClient}>
         {mounted && (
-          <WagmiProvider config={config}>
-            <ThemeProvider>
-              <LanguageProvider>
-                <RainbowKitWrapper>
-                  <AdminProvider>{children}</AdminProvider>
-                </RainbowKitWrapper>
-              </LanguageProvider>
-            </ThemeProvider>
-          </WagmiProvider>
+          <LanguageProvider>
+            <WagmiWrapper mounted={mounted}>
+              {children}
+            </WagmiWrapper>
+          </LanguageProvider>
         )}
       </QueryClientProvider>
     </PrivyProvider>
